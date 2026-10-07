@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: unity-tech-hub-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: unity_tech_hub
+      POSTGRES_USER: uth
+      POSTGRES_PASSWORD: uthpass
+    volumes:
+      - unity_tech_hub_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U uth -d unity_tech_hub']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  unity_tech_hub_postgres_data:

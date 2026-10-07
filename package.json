@@ -1,0 +1,35 @@
+{
+  "name": "unity-tech-hub-platform",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "predev": "pnpm install",
+    "postinstall": "pnpm --filter @unity/types build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md}\"",
+    "db:up": "podman compose up -d",
+    "db:down": "podman compose down",
+    "db:logs": "podman compose logs -f postgres",
+    "db:ps": "podman ps --filter name=unity-tech-hub-postgres",
+    "db:seed": "pnpm --filter api exec prisma db seed",
+    "db:migrate": "pnpm --filter api exec prisma migrate dev",
+    "types:build": "pnpm --filter @unity/types build",
+    "start:dev": "bash scripts/start-dev.sh",
+    "start:api": "bash scripts/start-api.sh"
+  },
+  "devDependencies": {
+    "@unity/eslint-config": "workspace:*",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  }
+}

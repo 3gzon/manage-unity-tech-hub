@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "instructor_compensations_instructor_id_period_start_period_end_" RENAME TO "instructor_compensations_instructor_id_period_start_period__idx";
