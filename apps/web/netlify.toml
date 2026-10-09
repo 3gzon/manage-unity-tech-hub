@@ -1,0 +1,10 @@
+[build]
+command = "pnpm install --frozen-lockfile && pnpm --filter @unity/types build && pnpm --filter web build"
+publish = "apps/web/.next"
+
+[build.environment]
+NODE_VERSION = "22"
+NPM_CONFIG_PRODUCTION = "false"
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"

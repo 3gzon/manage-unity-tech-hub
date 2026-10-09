@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateStudentRequest,
+  ImportStudentsResponse,
   StudentFamily,
   StudentFilterOptionsResponse,
   StudentListItem,
@@ -202,6 +203,9 @@ export class StudentsService {
           include: { course: true },
           orderBy: { issuedDate: 'desc' },
         },
+        instructor: {
+          select: { id: true, firstName: true, lastName: true },
+        },
       },
     });
 
@@ -215,18 +219,22 @@ export class StudentsService {
   async create(user: AuthenticatedUser, dto: CreateStudentRequest) {
     this.access.assertCanMutate(user);
 
+    await this.assertInstructor(dto.instructorId);
+
     const student = await this.prisma.$transaction(async (tx) => {
       const created = await tx.student.create({
         data: {
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          age: dto.age,
           gender: dto.gender,
           phone: dto.phone,
           email: dto.email?.toLowerCase(),
           address: dto.address,
           school: dto.school,
           notes: dto.notes,
+          instructorId: dto.instructorId,
           status: dto.status ?? 'ACTIVE',
           registrationDate: dto.registrationDate ? new Date(dto.registrationDate) : new Date(),
         },
@@ -250,9 +258,58 @@ export class StudentsService {
     return this.findOne(user, student.id);
   }
 
+  async importStudents(
+    user: AuthenticatedUser,
+    items: Array<{ row: number; student: CreateStudentRequest }>,
+  ): Promise<ImportStudentsResponse> {
+    this.access.assertCanMutate(user);
+
+    const result: ImportStudentsResponse = { created: 0, skipped: 0, failed: [] };
+
+    for (const item of items) {
+      const firstName = item.student.firstName?.trim() ?? '';
+      const lastName = item.student.lastName?.trim() ?? '';
+      const name = `${firstName} ${lastName}`.trim();
+
+      try {
+        if (!firstName || !lastName) {
+          throw new BadRequestException('First name and last name are required');
+        }
+
+        const existing = await this.prisma.student.findFirst({
+          where: {
+            deletedAt: null,
+            firstName: { equals: firstName, mode: 'insensitive' },
+            lastName: { equals: lastName, mode: 'insensitive' },
+          },
+          select: { id: true },
+        });
+
+        if (existing) {
+          result.skipped += 1;
+          continue;
+        }
+
+        await this.create(user, { ...item.student, firstName, lastName });
+        result.created += 1;
+      } catch (error) {
+        result.failed.push({
+          row: item.row,
+          name: name || `Row ${item.row}`,
+          message: this.importErrorMessage(error),
+        });
+      }
+    }
+
+    return result;
+  }
+
   async update(user: AuthenticatedUser, id: string, dto: UpdateStudentRequest) {
     this.access.assertCanMutate(user);
     await this.assertExists(id);
+    if (dto.instructorId) {
+      await this.assertInstructor(dto.instructorId);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.student.update({
@@ -261,12 +318,14 @@ export class StudentsService {
           firstName: dto.firstName?.trim(),
           lastName: dto.lastName?.trim(),
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          ...(dto.age !== undefined ? { age: dto.age } : {}),
           gender: dto.gender,
           phone: dto.phone,
           email: dto.email?.toLowerCase(),
           address: dto.address,
           school: dto.school,
           notes: dto.notes,
+          ...(dto.instructorId !== undefined ? { instructorId: dto.instructorId } : {}),
           status: dto.status,
           registrationDate: dto.registrationDate ? new Date(dto.registrationDate) : undefined,
         },
@@ -456,6 +515,7 @@ export class StudentsService {
     firstName: string;
     lastName: string;
     dateOfBirth: Date | null;
+    age: number | null;
     phone: string | null;
     email: string | null;
     status: StudentListItem['status'];
@@ -472,7 +532,7 @@ export class StudentsService {
       firstName: student.firstName,
       lastName: student.lastName,
       fullName: `${student.firstName} ${student.lastName}`,
-      age: this.calculateAge(student.dateOfBirth),
+      age: this.resolveAge(student.dateOfBirth, student.age),
       phone: student.phone,
       email: student.email,
       status: student.status,
@@ -502,6 +562,7 @@ export class StudentsService {
         enrollments: Array<{ id: string }>;
       }>;
     } | null;
+    instructor: { firstName: string; lastName: string } | null;
   }, user: AuthenticatedUser): StudentProfileResponse {
     const activeEnrollment = student.enrollments.find((e) => e.status === 'ACTIVE');
 
@@ -512,13 +573,17 @@ export class StudentsService {
         lastName: student.lastName,
         fullName: `${student.firstName} ${student.lastName}`,
         dateOfBirth: student.dateOfBirth?.toISOString().slice(0, 10) ?? null,
-        age: this.calculateAge(student.dateOfBirth),
+        age: this.resolveAge(student.dateOfBirth, student.age),
         gender: student.gender,
         phone: student.phone,
         email: student.email,
         address: student.address,
         school: student.school,
         notes: student.notes,
+        instructorId: student.instructorId,
+        instructorName: student.instructor
+          ? `${student.instructor.firstName} ${student.instructor.lastName}`
+          : null,
         status: student.status,
         registrationDate: student.registrationDate.toISOString().slice(0, 10),
         createdAt: student.createdAt.toISOString(),
@@ -584,6 +649,22 @@ export class StudentsService {
     };
   }
 
+  private resolveAge(dateOfBirth: Date | null | undefined, storedAge: number | null | undefined): number | null {
+    if (storedAge != null) return storedAge;
+    return this.calculateAge(dateOfBirth);
+  }
+
+  private async assertInstructor(instructorId: string | null | undefined) {
+    if (!instructorId) return;
+    const instructor = await this.prisma.instructor.findFirst({
+      where: { id: instructorId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!instructor) {
+      throw new BadRequestException('Instructor not found');
+    }
+  }
+
   private calculateAge(dateOfBirth: Date | null | undefined): number | null {
     if (!dateOfBirth) return null;
     const today = new Date();
@@ -607,6 +688,20 @@ export class StudentsService {
     if (!hasOutstanding) return 'PAID';
     const hasPartial = invoices.some((invoice) => invoice.status === 'PARTIALLY_PAID');
     return hasPartial ? 'PARTIAL' : 'UNPAID';
+  }
+
+  private importErrorMessage(error: unknown) {
+    if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') return response;
+      if (typeof response === 'object' && response && 'message' in response) {
+        const message = (response as { message?: string | string[] }).message;
+        if (Array.isArray(message)) return message.join(', ');
+        if (message) return message;
+      }
+    }
+
+    return error instanceof Error ? error.message : 'Could not create this student';
   }
 }
 

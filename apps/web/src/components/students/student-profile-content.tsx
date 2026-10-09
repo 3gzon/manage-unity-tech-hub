@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { StudentProfileResponse } from '@unity/types';
+import { fetchInstructors } from '@/lib/instructors-api';
 import { addFamilyMember, archiveStudent, fetchStudent, fetchStudents, leaveFamily, updateStudent } from '@/lib/students-api';
 import { useAuth } from '@/lib/auth/auth-context';
 import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
@@ -19,7 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/input';
 import { StudentForm } from '@/components/students/student-form';
-import type { StudentFormValues } from '@/lib/schemas/student.schema';
+import { toStudentRequest, type StudentFormValues } from '@/lib/schemas/student.schema';
 
 export function StudentProfileContent() {
   const params = useParams<{ id: string }>();
@@ -36,6 +37,7 @@ export function StudentProfileContent() {
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
+  const [instructors, setInstructors] = useState<Array<{ id: string; name: string }>>([]);
   const [familyMemberId, setFamilyMemberId] = useState('');
   const [familyError, setFamilyError] = useState<string | null>(null);
 
@@ -60,6 +62,9 @@ export function StudentProfileContent() {
     void fetchStudents({ page: 1, pageSize: 100 })
       .then((res) => setStudents(res.data.map((item) => ({ id: item.id, name: item.fullName }))))
       .catch(() => setStudents([]));
+    void fetchInstructors({ page: 1, pageSize: 100 })
+      .then((response) => setInstructors(response.data.map((instructor) => ({ id: instructor.id, name: instructor.name }))))
+      .catch(() => setInstructors([]));
   }, [canUpdate]);
 
   const tabs = isAdmin
@@ -67,11 +72,7 @@ export function StudentProfileContent() {
     : ['overview', 'enrollments', 'attendance'];
 
   async function handleUpdate(values: StudentFormValues) {
-    await updateStudent(params.id, {
-      ...values,
-      email: values.email || undefined,
-      guardians: values.guardians?.map((g) => ({ ...g, email: g.email || undefined })),
-    });
+    await updateStudent(params.id, toStudentRequest(values));
     setEditOpen(false);
     await load();
   }
@@ -138,6 +139,8 @@ export function StudentProfileContent() {
           <Info label="Phone" value={student.phone} />
           <Info label="Email" value={student.email} />
           <Info label="Date of birth" value={student.dateOfBirth} />
+          <Info label="Age" value={student.age === null ? null : String(student.age)} />
+          <Info label="Instructor" value={student.instructorName} />
           <Info label="School" value={student.school} />
           <Info label="Address" value={student.address} />
           <Info label="Registration date" value={student.registrationDate} />
@@ -256,10 +259,28 @@ export function StudentProfileContent() {
           <DialogDescription>Update student details and guardians.</DialogDescription>
         </DialogHeader>
         <StudentForm
+          instructors={instructors}
           defaultValues={{
-            ...student,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            dateOfBirth: student.dateOfBirth ?? undefined,
+            age: student.age != null && student.age > 0 ? student.age : undefined,
+            instructorId: student.instructorId ?? undefined,
             gender: student.gender ?? undefined,
-            guardians: profile.guardians,
+            phone: student.phone ?? undefined,
+            email: student.email ?? undefined,
+            address: student.address ?? undefined,
+            school: student.school ?? undefined,
+            notes: student.notes ?? undefined,
+            status: student.status,
+            registrationDate: student.registrationDate,
+            guardians: profile.guardians.map((guardian) => ({
+              firstName: guardian.firstName,
+              lastName: guardian.lastName,
+              phone: guardian.phone ?? '',
+              email: guardian.email ?? '',
+              relationship: guardian.relationship,
+            })),
           }}
           onCancel={() => setEditOpen(false)}
           onSubmit={handleUpdate}

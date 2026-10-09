@@ -37,7 +37,6 @@ export function CoursesPageContent() {
   const canManage = hasPermission(user, 'courses.manage');
 
   const [courses, setCourses] = useState<CourseListItem[]>([]);
-  const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [query, setQuery] = useState<CourseListQuery>({ page: 1, pageSize: 20 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +50,6 @@ export function CoursesPageContent() {
     try {
       const response = await fetchCourses(query);
       setCourses(response.data);
-      setMeta(response.meta);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load courses');
     } finally {

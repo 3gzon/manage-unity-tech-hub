@@ -1,5 +1,7 @@
 import type {
   CreateStudentRequest,
+  ImportStudentsRequest,
+  ImportStudentsResponse,
   StudentFilterOptionsResponse,
   StudentListQuery,
   StudentListResponse,
@@ -22,6 +24,10 @@ export function fetchStudent(id: string) {
 
 export function createStudent(data: CreateStudentRequest) {
   return api.post<StudentProfileResponse>('students', data);
+}
+
+export function importStudents(data: ImportStudentsRequest) {
+  return api.post<ImportStudentsResponse>('students/import', data);
 }
 
 export function updateStudent(id: string, data: UpdateStudentRequest) {

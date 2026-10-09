@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Upload } from 'lucide-react';
 import type { StudentListItem, StudentListQuery, StudentStatus } from '@unity/types';
+import { fetchInstructors } from '@/lib/instructors-api';
 import { archiveStudent, createStudent, fetchStudentFilterOptions, fetchStudents } from '@/lib/students-api';
 import { useAuth } from '@/lib/auth/auth-context';
 import { hasPermission } from '@/lib/auth/authorization';
@@ -19,8 +20,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ImportStudentsDialog } from '@/components/students/import-students-dialog';
 import { StudentForm } from '@/components/students/student-form';
-import type { StudentFormValues } from '@/lib/schemas/student.schema';
+import { toStudentRequest, type StudentFormValues } from '@/lib/schemas/student.schema';
+
+function formatRegistrationDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return value;
+  return `${match[3]}.${match[2]}.${match[1]}`;
+}
 
 export function StudentsPageContent() {
   const { user } = useAuth();
@@ -34,16 +42,21 @@ export function StudentsPageContent() {
   const [query, setQuery] = useState<StudentListQuery>({ page: 1, pageSize: 20 });
   const [searchInput, setSearchInput] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<StudentListItem | null>(null);
   const [filterOptions, setFilterOptions] = useState<{ courses: { id: string; name: string }[]; groups: { id: string; name: string; courseId: string }[] }>({
     courses: [],
     groups: [],
   });
+  const [instructors, setInstructors] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     void fetchStudentFilterOptions()
       .then(setFilterOptions)
       .catch(() => setFilterOptions({ courses: [], groups: [] }));
+    void fetchInstructors({ page: 1, pageSize: 100 })
+      .then((response) => setInstructors(response.data.map((instructor) => ({ id: instructor.id, name: instructor.name }))))
+      .catch(() => setInstructors([]));
   }, []);
 
   const filteredGroups = query.courseId
@@ -69,11 +82,7 @@ export function StudentsPageContent() {
   }, [load]);
 
   async function handleCreate(values: StudentFormValues) {
-    await createStudent({
-      ...values,
-      email: values.email || undefined,
-      guardians: values.guardians?.map((g) => ({ ...g, email: g.email || undefined })),
-    });
+    await createStudent(toStudentRequest(values));
     setCreateOpen(false);
     await load();
   }
@@ -93,10 +102,16 @@ export function StudentsPageContent() {
           <p className="text-sm text-muted-foreground">Manage student records and guardians.</p>
         </div>
         {canCreate ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add student
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add student
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -213,6 +228,7 @@ export function StudentsPageContent() {
                 <th className="px-4 py-3 font-medium">Group</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Registration date</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -224,7 +240,7 @@ export function StudentsPageContent() {
                       {student.fullName}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{student.age ?? '—'}</td>
+                  <td className="px-4 py-3">{student.age != null && student.age > 0 ? student.age : '—'}</td>
                   <td className="px-4 py-3">{student.phone ?? '—'}</td>
                   <td className="px-4 py-3">{student.guardianName ?? '—'}</td>
                   <td className="px-4 py-3">{student.activeCourse ?? '—'}</td>
@@ -235,6 +251,7 @@ export function StudentsPageContent() {
                   <td className="px-4 py-3">
                     <Badge variant="outline">{student.status}</Badge>
                   </td>
+                  <td className="px-4 py-3">{formatRegistrationDate(student.registrationDate)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Link href={`/students/${student.id}`}>
@@ -280,12 +297,15 @@ export function StudentsPageContent() {
         </div>
       </div>
 
+      <ImportStudentsDialog open={importOpen} onOpenChange={setImportOpen} onImported={load} />
+
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogHeader>
           <DialogTitle>Add student</DialogTitle>
           <DialogDescription>Create a new student record with optional guardians.</DialogDescription>
         </DialogHeader>
         <StudentForm
+          instructors={instructors}
           onCancel={() => setCreateOpen(false)}
           onSubmit={handleCreate}
           submitLabel="Create student"

@@ -45,6 +45,8 @@ export interface StudentDetail {
   address: string | null;
   school: string | null;
   notes: string | null;
+  instructorId: string | null;
+  instructorName: string | null;
   status: StudentStatus;
   registrationDate: string;
   createdAt: string;
@@ -130,12 +132,17 @@ export interface CreateStudentRequest {
   address?: string;
   school?: string;
   notes?: string;
+  age?: number;
+  instructorId?: string;
   status?: StudentStatus;
   registrationDate?: string;
   guardians?: GuardianInput[];
 }
 
-export type UpdateStudentRequest = Partial<CreateStudentRequest>;
+export type UpdateStudentRequest = Partial<Omit<CreateStudentRequest, 'age' | 'instructorId'>> & {
+  age?: number | null;
+  instructorId?: string | null;
+};
 
 export interface StudentListQuery {
   page?: number;
@@ -150,6 +157,27 @@ export interface StudentListQuery {
 }
 
 export type StudentListResponse = PaginatedResponse<StudentListItem>;
+
+export interface ImportStudentItem {
+  row: number;
+  student: CreateStudentRequest;
+}
+
+export interface ImportStudentsRequest {
+  students: ImportStudentItem[];
+}
+
+export interface StudentImportFailure {
+  row: number;
+  name: string;
+  message: string;
+}
+
+export interface ImportStudentsResponse {
+  created: number;
+  skipped: number;
+  failed: StudentImportFailure[];
+}
 
 export interface StudentFilterOption {
   id: string;

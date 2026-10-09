@@ -151,7 +151,7 @@ export function ContractFormContent({ mode }: { mode: 'create' | 'edit' }) {
     setSaving(true);
     setError(null);
     try {
-      const { status: _status, ...formFields } = form;
+      const { status, ...formFields } = form;
       const payload: EmploymentContractInput = {
         ...formFields,
         endDate: form.type === 'INDEFINITE' ? undefined : form.endDate || undefined,
@@ -169,7 +169,7 @@ export function ContractFormContent({ mode }: { mode: 'create' | 'edit' }) {
         router.push(`/contracts/${created.id}`);
         return;
       }
-      const updated = await updateContract(params.id, { ...payload, status: form.status });
+        const updated = await updateContract(params.id, { ...payload, status });
       setForm(fromDetail(updated));
       setContractNumber(updated.contractNumber);
     } catch (err) {

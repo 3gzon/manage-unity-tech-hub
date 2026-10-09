@@ -13,7 +13,13 @@ import {
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { AddFamilyMemberDto, CreateStudentDto, ListStudentsQueryDto, UpdateStudentDto } from './dto/student.dto';
+import {
+  AddFamilyMemberDto,
+  CreateStudentDto,
+  ImportStudentsDto,
+  ListStudentsQueryDto,
+  UpdateStudentDto,
+} from './dto/student.dto';
 import { StudentsService } from './students.service';
 
 @Controller('students')
@@ -42,6 +48,12 @@ export class StudentsController {
   @Permissions('students.create')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateStudentDto) {
     return this.studentsService.create(user, dto);
+  }
+
+  @Post('import')
+  @Permissions('students.create')
+  importStudents(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportStudentsDto) {
+    return this.studentsService.importStudents(user, dto.students);
   }
 
   @Post(':id/family')

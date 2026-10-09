@@ -294,6 +294,7 @@ model Student {
   firstName        String        @map("first_name")
   lastName         String        @map("last_name")
   dateOfBirth      DateTime?     @map("date_of_birth") @db.Date
+  age              Int?
   gender           Gender?
   email            String?
   phone            String?
@@ -301,6 +302,7 @@ model Student {
   school           String?
   notes            String?
   familyId         String?       @map("family_id") @db.Uuid
+  instructorId     String?       @map("instructor_id") @db.Uuid
   status           StudentStatus @default(ACTIVE)
   registrationDate DateTime      @default(now()) @map("registration_date") @db.Date
   createdAt        DateTime      @default(now()) @map("created_at")
@@ -309,6 +311,7 @@ model Student {
 
   user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   family       Family?        @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  instructor   Instructor?    @relation("StudentInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
   parents      StudentParent[]
   enrollments  Enrollment[]
   attendances  Attendance[]
@@ -320,6 +323,7 @@ model Student {
   @@index([email])
   @@index([status])
   @@index([familyId])
+  @@index([instructorId])
   @@index([deletedAt])
   @@map("students")
 }
@@ -377,6 +381,7 @@ model Instructor {
   deletedAt DateTime? @map("deleted_at")
 
   user              User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  students          Student[]                   @relation("StudentInstructor")
   primaryGroups     Group[]                     @relation("GroupPrimaryInstructor")
   compensationRules InstructorCompensationRule[]
   compensations     InstructorCompensation[]

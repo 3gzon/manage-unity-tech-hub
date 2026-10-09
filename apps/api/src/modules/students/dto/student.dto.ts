@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEmail,
@@ -12,6 +14,7 @@ import {
   Max,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Gender, ParentRelationship, StudentStatus } from '@prisma/client';
@@ -75,6 +78,17 @@ export class CreateStudentDto {
   notes?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  age?: number;
+
+  @IsOptional()
+  @IsUUID()
+  instructorId?: string;
+
+  @IsOptional()
   @IsEnum(StudentStatus)
   status?: StudentStatus;
 
@@ -129,6 +143,19 @@ export class UpdateStudentDto {
   notes?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  age?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  instructorId?: string | null;
+
+  @IsOptional()
   @IsEnum(StudentStatus)
   status?: StudentStatus;
 
@@ -141,6 +168,26 @@ export class UpdateStudentDto {
   @ValidateNested({ each: true })
   @Type(() => GuardianDto)
   guardians?: GuardianDto[];
+}
+
+export class ImportStudentItemDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  row!: number;
+
+  @ValidateNested()
+  @Type(() => CreateStudentDto)
+  student!: CreateStudentDto;
+}
+
+export class ImportStudentsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => ImportStudentItemDto)
+  students!: ImportStudentItemDto[];
 }
 
 export class ListStudentsQueryDto {

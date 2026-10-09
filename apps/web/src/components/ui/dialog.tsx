@@ -10,9 +10,18 @@ export function Dialog({ open, onOpenChange, children }: {
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <button type="button" className="absolute inset-0 bg-black/40" onClick={() => onOpenChange(false)} />
-      <div className="relative z-10 w-full max-w-2xl rounded-xl border bg-background p-6 shadow-lg">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/40"
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative z-10 flex max-h-[100dvh] w-full flex-col overflow-y-auto overscroll-contain border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg sm:max-h-[min(90dvh,52rem)] sm:max-w-2xl sm:rounded-xl sm:p-6"
+      >
         {children}
       </div>
     </div>
@@ -32,5 +41,5 @@ export function DialogDescription({ className, ...props }: React.HTMLAttributes<
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('mt-6 flex justify-end gap-2', className)} {...props} />;
+  return <div className={cn('mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
 }

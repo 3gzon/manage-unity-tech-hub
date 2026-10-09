@@ -17,7 +17,7 @@ export class ApiClientError extends Error {
 
 export interface ApiClientOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
-  params?: Record<string, string | number | boolean | undefined | null>;
+  params?: object;
   skipAuth?: boolean;
   skipRefresh?: boolean;
 }
@@ -32,7 +32,7 @@ function buildUrl(path: string, params?: ApiClientOptions['params']) {
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         url.searchParams.set(key, String(value));
       }
     }

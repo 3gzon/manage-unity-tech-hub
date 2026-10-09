@@ -567,7 +567,6 @@ function suggestedAmount(context: StudentPaymentContext, invoiceId: string, appl
   if (applyDiscount && pack > 0 && invoiceMatchesTuition(invoice, tuition)) {
     const gross = Number(tuition.grossAmount);
     const manual = Number(tuition.manualDiscount);
-    const afterManual = round2(gross - manual);
     const target =
       Math.abs(Number(invoice.subtotal) - gross) < 0.001 ? round2(manual + pack) : round2(pack);
     const nextDiscount = Math.max(Number(invoice.discount), target);
