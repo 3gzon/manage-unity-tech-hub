@@ -36,9 +36,7 @@ export interface StudentAttendanceRecord {
   studentName: string;
   status: AttendanceStatus;
   notes: string | null;
-  contactName: string | null;
-  contactPhone: string | null;
-  whatsappUrl: string | null;
+  notifyEmails: string[];
   statistics: StudentAttendanceStatistics;
 }
 
@@ -51,9 +49,17 @@ export interface StudentAttendanceStatistics {
   attendancePercentage: number;
 }
 
+export interface AbsenceEmailNotice {
+  studentId: string;
+  studentName: string;
+  sentTo: string[];
+  detail: string;
+}
+
 export interface SessionAttendanceResponse {
   session: ClassSessionDetail;
   records: StudentAttendanceRecord[];
+  emailNotices?: AbsenceEmailNotice[];
 }
 
 export interface TodayClassItem {
@@ -71,6 +77,7 @@ export interface TodayClassItem {
 }
 
 export interface CreateClassSessionRequest {
+  sessionId?: string;
   sessionDate: string;
   startTime: string;
   endTime: string;
@@ -124,6 +131,27 @@ export interface GroupStudentAttendanceRecord {
   startTime: string;
   status: AttendanceStatus | null;
   inClass: boolean | null;
+  notes: string | null;
+}
+
+export type GroupAttendanceMark = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'CLEAR';
+
+export interface GroupAttendanceChange {
+  sessionId: string;
+  studentId: string;
+  mark: GroupAttendanceMark;
+  notes?: string;
+}
+
+export interface SaveGroupAttendanceRequest {
+  changes: GroupAttendanceChange[];
+}
+
+export interface MonthlyAttendanceStat {
+  month: string;
+  attended: number;
+  held: number;
+  percentage: number;
 }
 
 export interface GroupStudentAttendanceRow {
@@ -131,6 +159,7 @@ export interface GroupStudentAttendanceRow {
   studentName: string;
   classesAttended: number;
   classesHeld: number;
+  months: MonthlyAttendanceStat[];
   records: GroupStudentAttendanceRecord[];
 }
 

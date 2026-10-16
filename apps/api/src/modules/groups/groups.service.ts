@@ -70,7 +70,7 @@ export class GroupsService {
           instructor: { select: { id: true, firstName: true, lastName: true } },
           schedules: { orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] },
           enrollments: {
-            where: { status: { in: ['ACTIVE', 'PENDING'] }, deletedAt: null },
+            where: { status: 'ACTIVE', deletedAt: null },
             select: { id: true },
           },
         },
@@ -351,7 +351,7 @@ export class GroupsService {
         ? `${group.instructor.firstName} ${group.instructor.lastName}`
         : null,
       capacity: group.capacity,
-      enrolledCount: group.enrollments.length,
+      enrolledCount: group.enrollments.filter((enrollment) => enrollment.status === 'ACTIVE').length,
       startDate: group.startDate?.toISOString().slice(0, 10) ?? null,
       endDate: group.endDate?.toISOString().slice(0, 10) ?? null,
       room: group.room,

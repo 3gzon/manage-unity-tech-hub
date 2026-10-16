@@ -1,5 +1,5 @@
-import { PaymentsPageContent } from '@/components/payments/payments-page-content';
+import { redirect } from 'next/navigation';
 
 export default function PaymentsPage() {
-  return <PaymentsPageContent />;
+  redirect('/invoices');
 }

@@ -439,8 +439,15 @@ export function PaymentsPageContent() {
             value={form.reference}
             onChange={(e) => setForm((prev) => ({ ...prev, reference: e.target.value }))}
           />
+          {selectedInvoiceOutstanding != null && Number(form.amount) > 0 && Number(form.amount) < Number(selectedInvoiceOutstanding) ? (
+            <p className="text-sm text-red-600">Add a comment when the student pays less than the amount due.</p>
+          ) : null}
           <Input
-            placeholder="Notes"
+            placeholder={
+              selectedInvoiceOutstanding != null && Number(form.amount) < Number(selectedInvoiceOutstanding)
+                ? 'Why is this payment less than the amount due?'
+                : 'Comment (optional)'
+            }
             value={form.notes}
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
           />
@@ -452,7 +459,16 @@ export function PaymentsPageContent() {
           </Button>
           <Button
             onClick={() => void handleCreate()}
-            disabled={!form.studentId || !form.invoiceId || !form.fiscalCoupon.trim() || !form.amount || Number(form.amount) <= 0}
+            disabled={
+              !form.studentId ||
+              !form.invoiceId ||
+              !form.fiscalCoupon.trim() ||
+              !form.amount ||
+              Number(form.amount) <= 0 ||
+              (selectedInvoiceOutstanding != null &&
+                Number(form.amount) < Number(selectedInvoiceOutstanding) &&
+                !form.notes.trim())
+            }
           >
             Save payment
           </Button>

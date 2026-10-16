@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateEnrollmentRequest,
   EnrollmentDetail,
@@ -98,6 +98,10 @@ export class EnrollmentsService {
     await this.assertGroupExists(dto.groupId);
     await this.assertNoDuplicateActive(dto.studentId, dto.groupId);
 
+    const status = dto.status ?? 'ACTIVE';
+    const notes = dto.notes?.trim() || null;
+    this.assertPendingComment(status, notes);
+
     const enrollment = await this.prisma.enrollment.create({
       data: {
         studentId: dto.studentId,
@@ -107,8 +111,8 @@ export class EnrollmentsService {
         discountId: dto.discountId,
         discountAmount: dto.discountAmount ?? 0,
         billingEnabled: dto.billingEnabled ?? true,
-        notes: dto.notes,
-        status: dto.status ?? 'ACTIVE',
+        notes,
+        status,
       },
     });
 
@@ -134,6 +138,8 @@ export class EnrollmentsService {
     const studentId = dto.studentId ?? existing.studentId;
     const groupId = dto.groupId ?? existing.groupId;
     const nextStatus = dto.status ?? existing.status;
+    const notes = dto.notes !== undefined ? dto.notes.trim() || null : existing.notes;
+    this.assertPendingComment(nextStatus, notes);
 
     if (ACTIVE_STATUSES.includes(nextStatus as (typeof ACTIVE_STATUSES)[number])) {
       await this.assertNoDuplicateActive(studentId, groupId, id);
@@ -150,7 +156,7 @@ export class EnrollmentsService {
         discountId: dto.discountId,
         discountAmount: dto.discountAmount,
         billingEnabled: dto.billingEnabled,
-        notes: dto.notes,
+        notes,
         status: dto.status,
       },
     });
@@ -191,6 +197,12 @@ export class EnrollmentsService {
       entity: 'Enrollment',
       entityId: id,
     });
+  }
+
+  private assertPendingComment(status: string, notes: string | null | undefined) {
+    if (status === 'PENDING' && !notes?.trim()) {
+      throw new BadRequestException('Add a comment explaining why this student is waiting');
+    }
   }
 
   private assertCanManageEnrollments(user: AuthenticatedUser) {

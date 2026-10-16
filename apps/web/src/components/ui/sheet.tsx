@@ -22,7 +22,7 @@ export function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="absolute right-3 top-3 rounded-md p-1 hover:bg-muted">
+        <SheetPrimitive.Close className="absolute right-3 top-3 rounded-full p-1 text-current hover:bg-black/5">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

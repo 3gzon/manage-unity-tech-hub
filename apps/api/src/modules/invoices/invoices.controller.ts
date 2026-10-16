@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -17,6 +20,7 @@ import {
   CreateInvoiceDto,
   GenerateMonthlyInvoicesDto,
   ListInvoicesQueryDto,
+  SendInvoiceEmailDto,
   UpdateInvoiceDto,
 } from './dto/invoice.dto';
 import { InvoicesService } from './invoices.service';
@@ -64,6 +68,19 @@ export class InvoicesController {
   @Permissions('invoices.cancel')
   cancel(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.invoicesService.cancel(user, id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Permissions('invoices.cancel')
+  archive(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.invoicesService.archive(user, id);
+  }
+
+  @Post(':id/email')
+  @Permissions('invoices.update')
+  sendEmail(@Param('id') id: string, @Body() dto: SendInvoiceEmailDto) {
+    return this.invoicesService.sendPdf(id, dto.email);
   }
 
   @Get(':id/pdf')

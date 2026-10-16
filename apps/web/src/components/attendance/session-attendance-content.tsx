@@ -7,15 +7,15 @@ import type { AttendanceStatus, SessionAttendanceResponse } from '@unity/types';
 import { fetchSessionAttendance, updateSessionAttendance } from '@/lib/attendance-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/dashboard/dashboard-states';
-
-const STATUSES: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'];
 
 export function SessionAttendanceContent() {
   const params = useParams<{ sessionId: string }>();
   const [data, setData] = useState<SessionAttendanceResponse | null>(null);
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +28,7 @@ export function SessionAttendanceContent() {
       const response = await fetchSessionAttendance(params.sessionId);
       setData(response);
       setDraft(Object.fromEntries(response.records.map((r) => [r.studentId, r.status])));
+      setReasons(Object.fromEntries(response.records.map((r) => [r.studentId, r.notes ?? ''])));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load attendance');
     } finally {
@@ -45,22 +46,30 @@ export function SessionAttendanceContent() {
 
   async function save(markAllPresent = false, completeSession = true) {
     if (!data) return;
+    const missingReason = markAllPresent
+      ? []
+      : data.records.filter((record) => (draft[record.studentId] ?? record.status) === 'ABSENT' && !(reasons[record.studentId] ?? '').trim());
+    if (missingReason.length) {
+      setError(`Add a comment explaining why ${missingReason.map((record) => record.studentName).join(', ')} ${missingReason.length === 1 ? 'is' : 'are'} missing.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const records = data.records.map((record) => ({
-        studentId: record.studentId,
-        status: markAllPresent ? ('PRESENT' as const) : draft[record.studentId] ?? 'ABSENT',
-      }));
+      const records = data.records.map((record) => {
+        const status = markAllPresent ? ('PRESENT' as const) : draft[record.studentId] ?? 'PRESENT';
+        return {
+          studentId: record.studentId,
+          status,
+          notes: status === 'ABSENT' ? reasons[record.studentId]?.trim() : undefined,
+        };
+      });
       const updated = await updateSessionAttendance(params.sessionId, { records, markAllPresent, completeSession });
       setData(updated);
       setDraft(Object.fromEntries(updated.records.map((record) => [record.studentId, record.status])));
-      const absent = updated.records.filter((record) => record.status === 'ABSENT');
-      setSaved(
-        absent.length
-          ? 'Attendance saved. Open WhatsApp for each student marked absent.'
-          : 'Attendance saved.',
-      );
+      setReasons(Object.fromEntries(updated.records.map((record) => [record.studentId, record.notes ?? ''])));
+      const emails = (updated.emailNotices ?? []).map((notice) => `${notice.studentName}: ${notice.detail}`).join(' ');
+      setSaved(['Attendance saved.', emails].filter(Boolean).join(' '));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save attendance');
     } finally {
@@ -75,6 +84,14 @@ export function SessionAttendanceContent() {
   if (!data) return null;
 
   const { session } = data;
+  const counts = data.records.reduce(
+    (summary, record) => {
+      const status = draft[record.studentId] ?? record.status;
+      summary[status] += 1;
+      return summary;
+    },
+    { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 },
+  );
 
   return (
     <div className="space-y-6">
@@ -98,67 +115,103 @@ export function SessionAttendanceContent() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 text-sm">
+        <Badge variant="secondary">Present {counts.PRESENT}</Badge>
+        <Badge variant="secondary">Absent {counts.ABSENT}</Badge>
+        <Badge variant="secondary">Late {counts.LATE}</Badge>
+        <Badge variant="secondary">Excused {counts.EXCUSED}</Badge>
+      </div>
+
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {saved ? <p className="text-sm text-muted-foreground">{saved}</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="min-w-full text-sm">
-          <thead className="border-b bg-muted/40 text-left">
-            <tr>
-              <th className="px-4 py-3 font-medium">Student</th>
-              <th className="px-4 py-3 text-center font-medium">Present</th>
-              <th className="px-4 py-3 text-center font-medium">Absent</th>
-              <th className="px-4 py-3 text-center font-medium">Late</th>
-              <th className="px-4 py-3 text-center font-medium">Excused</th>
-              <th className="px-4 py-3 font-medium">Stats</th>
-              <th className="px-4 py-3 font-medium">WhatsApp</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.records.map((record) => (
-              <tr key={record.studentId} className="border-b last:border-0">
-                <td className="px-4 py-3 font-medium">{record.studentName}</td>
-                {STATUSES.map((status) => (
-                  <td key={status} className="px-4 py-3 text-center">
-                    <input
-                      type="radio"
-                      name={`attendance-${record.studentId}`}
-                      checked={(draft[record.studentId] ?? record.status) === status}
-                      onChange={() => setStatus(record.studentId, status)}
-                      aria-label={`${record.studentName} ${status}`}
-                    />
-                  </td>
-                ))}
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary">{record.statistics.attendancePercentage}%</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      P{record.statistics.present} A{record.statistics.absent} L{record.statistics.late} E
-                      {record.statistics.excused}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  {(draft[record.studentId] ?? record.status) === 'ABSENT' ? (
-                    record.whatsappUrl ? (
-                      <a
-                        className="text-sm font-medium underline"
-                        href={record.whatsappUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {record.contactName ? `WhatsApp ${record.contactName}` : 'WhatsApp'}
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Add a guardian phone</span>
-                    )
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-3">
+        {data.records.map((record) => {
+          const status = draft[record.studentId] ?? record.status;
+          const missingComment = status === 'ABSENT' && !(reasons[record.studentId] ?? '').trim();
+          return (
+            <div
+              key={record.studentId}
+              className={`rounded-xl border p-4 ${status === 'ABSENT' ? 'border-red-200 bg-red-50' : ''}`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">{record.studentName}</p>
+                  <p className="text-xs text-muted-foreground">{record.statistics.attendancePercentage}% so far</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusButton
+                    label="Here"
+                    active={status === 'PRESENT'}
+                    tone="present"
+                    onClick={() => setStatus(record.studentId, 'PRESENT')}
+                  />
+                  <StatusButton
+                    label="Missing"
+                    active={status === 'ABSENT'}
+                    tone="absent"
+                    onClick={() => setStatus(record.studentId, 'ABSENT')}
+                  />
+                  <StatusButton
+                    label="Late"
+                    active={status === 'LATE'}
+                    tone="other"
+                    onClick={() => setStatus(record.studentId, 'LATE')}
+                  />
+                  <StatusButton
+                    label="Excused"
+                    active={status === 'EXCUSED'}
+                    tone="other"
+                    onClick={() => setStatus(record.studentId, 'EXCUSED')}
+                  />
+                </div>
+              </div>
+              {status === 'ABSENT' ? (
+                <div className="mt-3 space-y-2">
+                  <Input
+                    aria-label={`Why ${record.studentName} is missing`}
+                    placeholder="Why is this student missing?"
+                    value={reasons[record.studentId] ?? ''}
+                    className={missingComment ? 'border-red-500' : undefined}
+                    onChange={(event) =>
+                      setReasons((prev) => ({ ...prev, [record.studentId]: event.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {record.notifyEmails.length
+                      ? `Absence email goes to ${record.notifyEmails.join(', ')}`
+                      : 'No email address, so no absence email will be sent.'}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
+  );
+}
+
+function StatusButton({
+  label,
+  active,
+  tone,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  tone: 'present' | 'absent' | 'other';
+  onClick: () => void;
+}) {
+  const activeClass =
+    tone === 'present' ? 'bg-emerald-600 text-white' : tone === 'absent' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-3 py-2 text-sm font-medium ${active ? activeClass : 'border bg-background'}`}
+    >
+      {label}
+    </button>
   );
 }

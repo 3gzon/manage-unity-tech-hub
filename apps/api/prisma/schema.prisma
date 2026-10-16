@@ -313,11 +313,11 @@ model Student {
   family       Family?        @relation(fields: [familyId], references: [id], onDelete: SetNull)
   instructor   Instructor?    @relation("StudentInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
   parents      StudentParent[]
-  enrollments  Enrollment[]
-  attendances  Attendance[]
-  invoices     Invoice[]
-  payments     Payment[]
-  certificates Certificate[]
+  enrollments          Enrollment[]
+  attendances          Attendance[]
+  invoices             Invoice[]
+  payments             Payment[]
+  certificates         Certificate[]
 
   @@index([lastName, firstName])
   @@index([email])

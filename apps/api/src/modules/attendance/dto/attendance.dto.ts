@@ -8,6 +8,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   Min,
   MinLength,
@@ -43,6 +44,10 @@ export class ListGroupSessionsQueryDto {
 }
 
 export class CreateClassSessionDto {
+  @IsOptional()
+  @IsUUID()
+  sessionId?: string;
+
   @IsOptional()
   @IsDateString()
   sessionDate?: string;
@@ -103,6 +108,28 @@ export class UpdateSessionAttendanceDto {
   @IsOptional()
   @IsBoolean()
   completeSession?: boolean;
+}
+
+export class GroupAttendanceChangeDto {
+  @IsUUID()
+  sessionId!: string;
+
+  @IsUUID()
+  studentId!: string;
+
+  @IsIn(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED', 'CLEAR'])
+  mark!: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED' | 'CLEAR';
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class SaveGroupAttendanceDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GroupAttendanceChangeDto)
+  changes!: GroupAttendanceChangeDto[];
 }
 
 export class ListTodaySessionsQueryDto {

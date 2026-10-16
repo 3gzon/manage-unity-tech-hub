@@ -43,6 +43,10 @@ export class CreateInstructorDto {
   @IsEmail()
   email!: string;
 
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
   @IsOptional()
   @IsString()
   phone?: string;

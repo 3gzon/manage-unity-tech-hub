@@ -64,8 +64,6 @@ export function InstructorProfileContent() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Info label="Phone" value={instructor.phone} />
-        <Info label="Hire date" value={instructor.hireDate} />
-        <Info label="Linked user" value={instructor.userName ? `${instructor.userName} (${instructor.userEmail})` : null} />
         <Info label="Active groups" value={String(instructor.activeGroupsCount)} />
       </div>
 

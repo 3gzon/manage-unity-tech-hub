@@ -20,10 +20,7 @@ export function assertStaffAccess(user: AuthenticatedUser) {
 
 export function creatableRoles(actor: AuthenticatedUser): SystemRole[] {
   if (isSuperAdmin(actor)) {
-    return [...SYSTEM_ROLES];
-  }
-  if (isAdmin(actor)) {
-    return ['INSTRUCTOR'];
+    return SYSTEM_ROLES.filter((role) => role !== 'INSTRUCTOR');
   }
   return [];
 }

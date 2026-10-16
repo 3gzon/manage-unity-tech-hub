@@ -5,6 +5,8 @@ import type {
   InvoiceDetail,
   InvoiceListQuery,
   InvoiceListResponse,
+  SendInvoiceEmailRequest,
+  SendInvoiceEmailResponse,
   UpdateInvoiceRequest,
 } from '@unity/types';
 import { api } from '@/lib/api-client';
@@ -31,4 +33,12 @@ export function updateInvoice(id: string, data: UpdateInvoiceRequest) {
 
 export function cancelInvoice(id: string) {
   return api.post<InvoiceDetail>(`invoices/${id}/cancel`);
+}
+
+export function archiveInvoice(id: string) {
+  return api.delete<void>(`invoices/${id}`);
+}
+
+export function sendInvoiceEmail(id: string, data: SendInvoiceEmailRequest) {
+  return api.post<SendInvoiceEmailResponse>(`invoices/${id}/email`, data);
 }

@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type {
+  AbsenceEmailNotice,
   AttendanceStatus,
   GroupAttendanceResponse,
   SessionAttendanceResponse,
@@ -9,10 +10,10 @@ import type {
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
-import type { UpdateSessionAttendanceDto } from './dto/attendance.dto';
+import type { SaveGroupAttendanceDto, UpdateSessionAttendanceDto } from './dto/attendance.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SessionsService } from './sessions.service';
-import { whatsappLink } from './whatsapp';
+import { MailService } from '../../infrastructure/mail/mail.service';
 
 @Injectable()
 export class AttendanceRecordsService {
@@ -21,6 +22,7 @@ export class AttendanceRecordsService {
     private readonly sessions: SessionsService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
   ) {}
 
   async getSessionAttendance(user: AuthenticatedUser, sessionId: string): Promise<SessionAttendanceResponse> {
@@ -53,16 +55,12 @@ export class AttendanceRecordsService {
       records: enrollments.map((enrollment) => {
         const existing = attendanceByStudent.get(enrollment.studentId);
         const studentName = `${enrollment.student.firstName} ${enrollment.student.lastName}`;
-        const contact = familyContact(enrollment.student);
-        const message = `Përshëndetje, ${studentName} mungoi në mësimin ${detail.courseName} (${detail.groupName}) më ${detail.sessionDate}, ora ${detail.startTime}–${detail.endTime}.`;
         return {
           studentId: enrollment.studentId,
           studentName,
-          status: (existing?.status ?? 'ABSENT') as AttendanceStatus,
+          status: (existing?.status ?? 'PRESENT') as AttendanceStatus,
           notes: existing?.notes ?? null,
-          contactName: contact?.name ? contact.name : null,
-          contactPhone: contact?.phone ?? null,
-          whatsappUrl: contact ? whatsappLink(contact.phone, message) : null,
+          notifyEmails: absenceRecipients(enrollment.student),
           statistics: statsByStudent.get(enrollment.studentId) ?? this.emptyStatistics(),
         };
       }),
@@ -79,18 +77,38 @@ export class AttendanceRecordsService {
 
     const enrollments = await this.prisma.enrollment.findMany({
       where: { groupId: session.groupId, status: 'ACTIVE', deletedAt: null },
-      select: { studentId: true },
+      select: {
+        studentId: true,
+        student: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            parents: {
+              select: { parent: { select: { email: true, deletedAt: true } } },
+            },
+          },
+        },
+      },
     });
-    const enrolledIds = new Set(enrollments.map((e) => e.studentId));
+    const enrolledById = new Map(enrollments.map((enrollment) => [enrollment.studentId, enrollment]));
 
-    let records = dto.records.filter((record) => enrolledIds.has(record.studentId));
+    let records = dto.records.filter((record) => enrolledById.has(record.studentId));
 
     if (dto.markAllPresent) {
-      records = [...enrolledIds].map((studentId) => ({
+      records = [...enrolledById.keys()].map((studentId) => ({
         studentId,
         status: 'PRESENT' as const,
         notes: records.find((r) => r.studentId === studentId)?.notes,
       }));
+    }
+
+    for (const record of records) {
+      if (record.status === 'ABSENT' && !(record.notes ?? '').trim()) {
+        const student = enrolledById.get(record.studentId)?.student;
+        const name = student ? `${student.firstName} ${student.lastName}` : 'This student';
+        throw new BadRequestException(`Add a comment explaining why ${name} is missing`);
+      }
     }
 
     const existing = await this.prisma.attendance.findMany({
@@ -114,11 +132,11 @@ export class AttendanceRecordsService {
             classSessionId: sessionId,
             studentId: record.studentId,
             status: record.status,
-            notes: record.notes,
+            notes: record.notes?.trim() || null,
           },
           update: {
             status: record.status,
-            notes: record.notes,
+            notes: record.notes?.trim() || null,
           },
         });
 
@@ -154,7 +172,36 @@ export class AttendanceRecordsService {
       await this.notifyAdminsOfAttendance(user, sessionId);
     }
 
-    return this.getSessionAttendance(user, sessionId);
+    const detail = this.sessions.toDetail(session);
+    const emailNotices: AbsenceEmailNotice[] = [];
+    for (const record of records) {
+      if (record.status !== 'ABSENT') continue;
+      const previous = existingByStudent.get(record.studentId);
+      const reason = record.notes?.trim() ?? '';
+      const alreadySent = previous?.status === 'ABSENT' && (previous.notes ?? '').trim() === reason;
+      if (alreadySent) continue;
+
+      const student = enrolledById.get(record.studentId)?.student;
+      if (!student) continue;
+      const result = await this.mail.sendAbsenceNotice({
+        to: absenceRecipients(student),
+        studentName: `${student.firstName} ${student.lastName}`,
+        courseName: detail.courseName,
+        groupName: detail.groupName,
+        sessionDate: detail.sessionDate,
+        startTime: detail.startTime,
+        endTime: detail.endTime,
+        reason,
+      });
+      emailNotices.push({
+        studentId: record.studentId,
+        studentName: `${student.firstName} ${student.lastName}`,
+        sentTo: result.sentTo,
+        detail: result.detail,
+      });
+    }
+
+    return { ...(await this.getSessionAttendance(user, sessionId)), emailNotices };
   }
 
   async getGroupAttendance(user: AuthenticatedUser, groupId: string): Promise<GroupAttendanceResponse> {
@@ -179,12 +226,15 @@ export class AttendanceRecordsService {
       }),
       this.prisma.attendance.findMany({
         where: { classSession: { groupId, status: { in: ['SCHEDULED', 'COMPLETED'] } } },
-        select: { classSessionId: true, studentId: true, status: true },
+        select: { classSessionId: true, studentId: true, status: true, notes: true },
       }),
     ]);
 
     const attendanceKey = new Map(
-      attendances.map((row) => [`${row.classSessionId}:${row.studentId}`, row.status as AttendanceStatus]),
+      attendances.map((row) => [
+        `${row.classSessionId}:${row.studentId}`,
+        { status: row.status as AttendanceStatus, notes: row.notes },
+      ]),
     );
 
     return {
@@ -197,13 +247,15 @@ export class AttendanceRecordsService {
       })),
       students: enrollments.map((enrollment) => {
         const records = sessions.map((session) => {
-          const status = attendanceKey.get(`${session.id}:${enrollment.studentId}`) ?? null;
+          const entry = attendanceKey.get(`${session.id}:${enrollment.studentId}`) ?? null;
+          const status = entry?.status ?? null;
           return {
             sessionId: session.id,
             sessionDate: session.sessionDate.toISOString().slice(0, 10),
             startTime: session.startTime,
             status,
             inClass: status === null ? null : status === 'PRESENT' || status === 'LATE',
+            notes: entry?.notes ?? null,
           };
         });
 
@@ -212,10 +264,122 @@ export class AttendanceRecordsService {
           studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`.trim(),
           classesAttended: records.filter((record) => record.inClass === true).length,
           classesHeld: sessions.length,
+          months: monthlyAttendance(records),
           records,
         };
       }),
     };
+  }
+
+  async saveGroupAttendance(
+    user: AuthenticatedUser,
+    groupId: string,
+    dto: SaveGroupAttendanceDto,
+  ): Promise<GroupAttendanceResponse> {
+    await this.sessions.assertGroupAccess(user, groupId);
+    this.sessions.assertCanManageAttendance(user);
+    if (!dto.changes.length) return this.getGroupAttendance(user, groupId);
+
+    const sessionIds = [...new Set(dto.changes.map((change) => change.sessionId))];
+    const sessions = await this.prisma.classSession.findMany({
+      where: { id: { in: sessionIds }, groupId },
+      include: { group: { include: { course: true } } },
+    });
+    if (sessions.length !== sessionIds.length) {
+      throw new BadRequestException('One of these classes is not in this group');
+    }
+    const sessionById = new Map(sessions.map((session) => [session.id, session]));
+
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { groupId, status: { in: ['ACTIVE', 'PENDING'] }, deletedAt: null },
+      include: {
+        student: {
+          include: {
+            parents: { include: { parent: true } },
+          },
+        },
+      },
+    });
+    const enrolledById = new Map(enrollments.map((enrollment) => [enrollment.studentId, enrollment]));
+
+    for (const change of dto.changes) {
+      const enrollment = enrolledById.get(change.studentId);
+      if (!enrollment) throw new BadRequestException('One of these students is not enrolled in this group');
+      if (change.mark === 'ABSENT' && !(change.notes ?? '').trim()) {
+        const name = `${enrollment.student.firstName} ${enrollment.student.lastName}`.trim();
+        const session = sessionById.get(change.sessionId);
+        const when = session ? session.sessionDate.toISOString().slice(0, 10) : 'that day';
+        throw new BadRequestException(`Add a comment explaining why ${name} is missing on ${when}`);
+      }
+    }
+
+    const existing = await this.prisma.attendance.findMany({
+      where: { classSessionId: { in: sessionIds } },
+    });
+    const existingKey = new Map(existing.map((row) => [`${row.classSessionId}:${row.studentId}`, row]));
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const change of dto.changes) {
+        if (change.mark === 'CLEAR') {
+          await tx.attendance.deleteMany({
+            where: { classSessionId: change.sessionId, studentId: change.studentId },
+          });
+          continue;
+        }
+        const notes = change.notes?.trim() || null;
+        await tx.attendance.upsert({
+          where: {
+            classSessionId_studentId: {
+              classSessionId: change.sessionId,
+              studentId: change.studentId,
+            },
+          },
+          create: {
+            classSessionId: change.sessionId,
+            studentId: change.studentId,
+            status: change.mark,
+            notes,
+          },
+          update: { status: change.mark, notes },
+        });
+      }
+    });
+
+    const detailGroup = sessions[0];
+    for (const change of dto.changes) {
+      if (change.mark !== 'ABSENT') continue;
+      const previous = existingKey.get(`${change.sessionId}:${change.studentId}`);
+      const reason = change.notes?.trim() ?? '';
+      const alreadySent = previous?.status === 'ABSENT' && (previous.notes ?? '').trim() === reason;
+      if (alreadySent) continue;
+      const enrollment = enrolledById.get(change.studentId);
+      const session = sessionById.get(change.sessionId);
+      if (!enrollment || !session || !detailGroup) continue;
+      const studentName = `${enrollment.student.firstName} ${enrollment.student.lastName}`.trim();
+      await this.mail.sendAbsenceNotice({
+        to: absenceRecipients(enrollment.student),
+        studentName,
+        courseName: detailGroup.group.course.name,
+        groupName: detailGroup.group.name,
+        sessionDate: session.sessionDate.toISOString().slice(0, 10),
+        startTime: session.startTime,
+        endTime: session.endTime,
+        reason,
+      });
+    }
+
+    if (detailGroup) {
+      const instructorName = `${user.firstName} ${user.lastName}`.trim();
+      const absentCount = dto.changes.filter((change) => change.mark === 'ABSENT').length;
+      await this.notifications.notifyAdmins({
+        excludeUserId: user.id,
+        type: absentCount ? 'WARNING' : 'INFO',
+        title: `Attendance updated — ${detailGroup.group.name}`,
+        message: `${instructorName} updated ${dto.changes.length} attendance ${dto.changes.length === 1 ? 'mark' : 'marks'} for ${detailGroup.group.name}.`,
+      });
+    }
+
+    return this.getGroupAttendance(user, groupId);
   }
 
   private async notifyAdminsOfAttendance(user: AuthenticatedUser, sessionId: string) {
@@ -297,17 +461,35 @@ export class AttendanceRecordsService {
   }
 }
 
-function familyContact(student: {
-  phone: string | null;
-  parents: Array<{ parent: { firstName: string; lastName: string; phone: string | null; deletedAt: Date | null } }>;
-}): { name: string; phone: string } | null {
-  const guardian = student.parents.find((link) => link.parent.phone && !link.parent.deletedAt);
-  if (guardian?.parent.phone) {
-    return {
-      name: `${guardian.parent.firstName} ${guardian.parent.lastName}`.trim(),
-      phone: guardian.parent.phone,
-    };
+function monthlyAttendance(
+  records: Array<{ sessionDate: string; inClass: boolean | null }>,
+) {
+  const months = new Map<string, { attended: number; held: number }>();
+  for (const record of records) {
+    const month = record.sessionDate.slice(0, 7);
+    const current = months.get(month) ?? { attended: 0, held: 0 };
+    current.held += 1;
+    if (record.inClass) current.attended += 1;
+    months.set(month, current);
   }
-  if (student.phone) return { name: '', phone: student.phone };
-  return null;
+
+  return [...months.entries()]
+    .sort((left, right) => right[0].localeCompare(left[0]))
+    .map(([month, stats]) => ({
+      month,
+      attended: stats.attended,
+      held: stats.held,
+      percentage: stats.held === 0 ? 0 : Math.round((stats.attended / stats.held) * 1000) / 10,
+    }));
+}
+
+function absenceRecipients(student: {
+  email: string | null;
+  parents: Array<{ parent: { email: string | null; deletedAt: Date | null } }>;
+}): string[] {
+  const emails = [
+    student.email,
+    ...student.parents.map((link) => (link.parent.deletedAt ? null : link.parent.email)),
+  ];
+  return [...new Set(emails.map((email) => email?.trim()).filter((email): email is string => Boolean(email)))];
 }

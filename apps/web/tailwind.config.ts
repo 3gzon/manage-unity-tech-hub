@@ -28,6 +28,9 @@ const config: Config = {
         ring: 'hsl(var(--ring))',
         input: 'hsl(var(--input))',
       },
+      fontFamily: {
+        sans: ['var(--font-stolzl)', 'sans-serif'],
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

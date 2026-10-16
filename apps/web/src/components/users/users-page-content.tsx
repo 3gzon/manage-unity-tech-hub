@@ -46,7 +46,6 @@ function emptyForm(defaultRole: SystemRole | '') {
     password: '',
     phone: '',
     role: defaultRole,
-    instructorId: '',
   };
 }
 
@@ -83,7 +82,8 @@ export function UsersPageContent() {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [savingRole, setSavingRole] = useState<string | null>(null);
 
-  const defaultCreateRole = lookups?.creatableRoles[0] ?? '';
+  const creatableRoleOptions = (lookups?.creatableRoles ?? []).filter((role) => role !== 'INSTRUCTOR');
+  const defaultCreateRole = creatableRoleOptions[0] ?? '';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,7 +148,6 @@ export function UsersPageContent() {
       password: '',
       phone: target.phone ?? '',
       role: target.role ?? defaultCreateRole,
-      instructorId: target.instructorId ?? '',
     });
     setFormError(null);
     setFormOpen(true);
@@ -169,7 +168,6 @@ export function UsersPageContent() {
           email: form.email.trim(),
           phone: form.phone.trim() || null,
           role: form.role,
-          instructorId: form.instructorId || null,
         });
       } else {
         const payload: CreateManagedUserRequest = {
@@ -179,7 +177,6 @@ export function UsersPageContent() {
           password: form.password,
           phone: form.phone.trim() || undefined,
           role: form.role,
-          instructorId: form.instructorId || undefined,
         };
         await createUser(payload);
       }
@@ -252,7 +249,7 @@ export function UsersPageContent() {
     });
   }
 
-  const roleOptions = editing ? editing.actions.assignableRoles : (lookups?.creatableRoles ?? []);
+  const roleOptions = editing ? editing.actions.assignableRoles : creatableRoleOptions;
 
   if (!allowed) {
     return (
@@ -269,10 +266,10 @@ export function UsersPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the three system roles. Linked instructor accounts control group access.
+            Create a login and choose a role.
           </p>
         </div>
-        {canManage && (lookups?.creatableRoles.length ?? 0) > 0 ? (
+        {canManage && creatableRoleOptions.length > 0 ? (
           <Button onClick={openCreate}>Create user</Button>
         ) : null}
       </div>
@@ -337,7 +334,6 @@ export function UsersPageContent() {
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Linked Instructor</th>
                 <th className="px-4 py-3 font-medium">Last Login</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
@@ -351,7 +347,6 @@ export function UsersPageContent() {
                   <td className="px-4 py-3">
                     <Badge variant={item.status === 'DISABLED' ? 'secondary' : 'outline'}>{item.status}</Badge>
                   </td>
-                  <td className="px-4 py-3">{item.instructorName ?? '—'}</td>
                   <td className="px-4 py-3">{formatLastLogin(item.lastLoginAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -479,9 +474,7 @@ export function UsersPageContent() {
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit user' : 'Create user'}</DialogTitle>
           <DialogDescription>
-            {editing
-              ? 'Update profile, role, and optional instructor link.'
-              : 'Accounts start active. Instructors only see groups through a linked instructor profile.'}
+            {editing ? 'Update the name, email, and role.' : 'Accounts start active.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 md:grid-cols-2">
@@ -536,24 +529,6 @@ export function UsersPageContent() {
                   {ROLE_LABELS[role]}
                 </option>
               ))}
-            </Select>
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <Label>Linked instructor</Label>
-            <Select
-              value={form.instructorId}
-              onChange={(e) => setForm((prev) => ({ ...prev, instructorId: e.target.value }))}
-            >
-              <option value="">None</option>
-              {(lookups?.instructors ?? []).map((instructor) => {
-                const taken = Boolean(instructor.linkedUserId && instructor.linkedUserId !== editing?.id);
-                return (
-                  <option key={instructor.id} value={instructor.id} disabled={taken}>
-                    {instructor.name}
-                    {taken ? ' (already linked)' : ''}
-                  </option>
-                );
-              })}
             </Select>
           </div>
           {formError ? <p className="text-sm text-red-600 md:col-span-2">{formError}</p> : null}

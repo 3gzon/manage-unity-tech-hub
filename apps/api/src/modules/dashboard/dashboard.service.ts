@@ -113,6 +113,7 @@ export class DashboardService {
       })),
       upcomingClasses: upcomingClasses.map((session) => ({
         id: session.id,
+        groupId: session.groupId,
         groupName: session.group.name,
         courseName: session.group.course.name,
         sessionDate: session.sessionDate.toISOString().slice(0, 10),
@@ -236,6 +237,7 @@ export class DashboardService {
 
     const mapSession = (session: (typeof todaysClasses)[number]) => ({
       id: session.id,
+      groupId: session.groupId,
       groupName: session.group.name,
       courseName: session.group.course.name,
       sessionDate: session.sessionDate.toISOString().slice(0, 10),

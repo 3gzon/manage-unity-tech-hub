@@ -3,19 +3,41 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import type { InvoiceListItem, InvoiceListQuery, InvoiceStatus } from '@unity/types';
-import { createInvoice, fetchInvoices, generateMonthlyInvoices } from '@/lib/invoices-api';
-import { fetchStudents } from '@/lib/students-api';
+import type { InvoiceListItem, InvoiceListQuery } from '@unity/types';
+import { archiveInvoice, createInvoice, fetchInvoices, sendInvoiceEmail } from '@/lib/invoices-api';
+import { fetchStudent, fetchStudents } from '@/lib/students-api';
 import { hasRole } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorState, EmptyState } from '@/components/dashboard/dashboard-states';
-import { Input, Select } from '@/components/ui/input';
+import { Input, Label } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const STATUSES: InvoiceStatus[] = ['DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'OVERDUE', 'CANCELLED'];
+function todayInput() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function displayDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+}
+
+function emptyInvoice() {
+  const today = todayInput();
+  return {
+    studentId: '',
+    studentName: '',
+    date: today,
+    description: '',
+    price: '',
+    email: '',
+    kind: 'paid' as 'paid' | 'due',
+  };
+}
 
 export function InvoicesPageContent() {
   const { user } = useAuth();
@@ -24,24 +46,17 @@ export function InvoicesPageContent() {
   const [query, setQuery] = useState<InvoiceListQuery>({ page: 1, pageSize: 20 });
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
-  const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
+  const [studentQuery, setStudentQuery] = useState('');
+  const [studentHits, setStudentHits] = useState<Array<{ id: string; name: string; email: string | null }>>([]);
+  const [searchingStudents, setSearchingStudents] = useState(false);
+  const [fillingEmail, setFillingEmail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [billingMonth, setBillingMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [generating, setGenerating] = useState(false);
-  const [generateMessage, setGenerateMessage] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [createState, setCreateState] = useState({
-    studentId: '',
-    issueDate: new Date().toISOString().slice(0, 10),
-    dueDate: new Date().toISOString().slice(0, 10),
-    billingPeriod: '',
-    discount: '',
-    itemDescription: '',
-    itemQuantity: '1',
-    itemUnitPrice: '',
-  });
+  const [createState, setCreateState] = useState(emptyInvoice);
+  const [archiveTarget, setArchiveTarget] = useState<InvoiceListItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,60 +77,96 @@ export function InvoicesPageContent() {
   }, [load]);
 
   useEffect(() => {
-    void fetchStudents({ page: 1, pageSize: 100 })
-      .then((res) => setStudents(res.data.map((s) => ({ id: s.id, name: s.fullName }))))
-      .catch(() => setStudents([]));
-  }, []);
+    if (!createOpen) return;
+    const handle = window.setTimeout(() => {
+      setSearchingStudents(true);
+      void fetchStudents({ search: studentQuery.trim() || undefined, pageSize: 20 })
+        .then((res) =>
+          setStudentHits(res.data.map((student) => ({ id: student.id, name: student.fullName, email: student.email }))),
+        )
+        .catch(() => setStudentHits([]))
+        .finally(() => setSearchingStudents(false));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [createOpen, studentQuery]);
 
-  const quickTotal = useMemo(() => {
-    const qty = Number(createState.itemQuantity || 0);
-    const price = Number(createState.itemUnitPrice || 0);
-    const discount = Number(createState.discount || 0);
-    const raw = qty * price - discount;
-    return raw > 0 ? raw.toFixed(2) : '0.00';
-  }, [createState.discount, createState.itemQuantity, createState.itemUnitPrice]);
+  const previewTotal = useMemo(() => {
+    const price = Number(createState.price || 0);
+    return price > 0 ? price.toFixed(2) : '0.00';
+  }, [createState.price]);
 
-  async function handleGenerate() {
-    setGenerateMessage(null);
-    setError(null);
-    setGenerating(true);
+  async function selectStudent(student: { id: string; name: string; email: string | null }) {
+    setCreateState((prev) => ({
+      ...prev,
+      studentId: student.id,
+      studentName: student.name,
+      email: student.email ?? '',
+    }));
+    if (student.email) return;
+    setFillingEmail(true);
     try {
-      const result = await generateMonthlyInvoices({ month: billingMonth });
-      const created = result.created.length;
-      setGenerateMessage(
-        created
-          ? `Created ${created} invoice${created === 1 ? '' : 's'} for ${result.month}. ${result.skipped} already billed or not billable.`
-          : `No new invoices for ${result.month}. ${result.skipped} students were already billed or not billable.`,
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not generate invoices');
+      const profile = await fetchStudent(student.id);
+      const guardianEmail = profile.guardians.find((guardian) => guardian.email)?.email ?? '';
+      const email = profile.student.email ?? guardianEmail;
+      setCreateState((prev) => (prev.studentId === student.id ? { ...prev, email } : prev));
+    } catch {
+      // The address can still be typed in.
     } finally {
-      setGenerating(false);
+      setFillingEmail(false);
     }
   }
 
   async function handleCreate() {
     setCreateError(null);
     try {
-      await createInvoice({
+      const paid = createState.kind === 'paid';
+      const invoice = await createInvoice({
         studentId: createState.studentId,
-        issueDate: createState.issueDate,
-        dueDate: createState.dueDate,
-        billingPeriod: createState.billingPeriod,
-        discount: createState.discount ? Number(createState.discount) : undefined,
+        issueDate: createState.date,
+        dueDate: createState.date,
+        billingPeriod: displayDate(createState.date),
+        ...(paid ? { status: 'PAID' as const } : {}),
         items: [
           {
-            description: createState.itemDescription,
-            quantity: Number(createState.itemQuantity),
-            unitPrice: Number(createState.itemUnitPrice),
+            description: createState.description,
+            quantity: 1,
+            unitPrice: Number(createState.price),
           },
         ],
       });
+      const email = createState.email.trim();
+      if (email) {
+        try {
+          await sendInvoiceEmail(invoice.id, { email });
+          setNotice(
+            paid
+              ? `Sent the payment confirmation and PDF to ${email}.`
+              : `Sent the invoice for payment and PDF to ${email}.`,
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Could not send the email';
+          setNotice(`The invoice was saved, but the email could not be sent. ${message}`);
+        }
+      } else {
+        setNotice(null);
+      }
       setCreateOpen(false);
+      setCreateState(emptyInvoice());
       await load();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Could not create invoice');
+    }
+  }
+
+  async function handleArchive() {
+    if (!archiveTarget) return;
+    try {
+      await archiveInvoice(archiveTarget.id);
+      setArchiveTarget(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not archive invoice');
+      setArchiveTarget(null);
     }
   }
 
@@ -129,53 +180,41 @@ export function InvoicesPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
           <p className="text-sm text-muted-foreground">
-            Generate a month from enrollments. Extra-course and family-pack discounts from Settings are already taken off.
+            Record a payment and email the confirmation, or send an invoice that still needs to be paid.
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input type="month" className="w-full sm:w-[180px]" value={billingMonth} onChange={(e) => setBillingMonth(e.target.value)} />
-          <Button variant="outline" onClick={() => void handleGenerate()} disabled={generating || !billingMonth}>
-            {generating ? 'Generating…' : 'Generate invoices'}
-          </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Create invoice
-          </Button>
-        </div>
-      </div>
-      {generateMessage ? <p className="text-sm text-muted-foreground">{generateMessage}</p> : null}
-
-      <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-4">
-        <Input
-          placeholder="Search invoice, student, period..."
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              setQuery((prev) => ({
-                ...prev,
-                page: 1,
-                search: (e.target as HTMLInputElement).value || undefined,
-              }));
-            }
+        <Button
+          onClick={() => {
+            setCreateError(null);
+            setCreateState(emptyInvoice());
+            setStudentQuery('');
+            setStudentHits([]);
+            setSearchingStudents(true);
+            setCreateOpen(true);
           }}
-        />
-        <Select
-          value={query.status ?? ''}
-          onChange={(e) =>
+        >
+          <Plus className="h-4 w-4" />
+          Create invoice
+        </Button>
+      </div>
+
+      {notice ? (
+        <p className={notice.includes('could not') ? 'text-sm text-red-600' : 'text-sm text-emerald-700'}>{notice}</p>
+      ) : null}
+
+      <Input
+        className="max-w-sm"
+        placeholder="Search invoice or student..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
             setQuery((prev) => ({
               ...prev,
               page: 1,
-              status: (e.target.value as InvoiceStatus) || undefined,
-            }))
+              search: (e.target as HTMLInputElement).value || undefined,
+            }));
           }
-        >
-          <option value="">All statuses</option>
-          {STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </Select>
-      </div>
+        }}
+      />
 
       {loading ? (
         <Skeleton className="h-52 w-full" />
@@ -190,12 +229,8 @@ export function InvoicesPageContent() {
               <tr>
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Student</th>
-                <th className="px-4 py-3 font-medium">Period</th>
+                <th className="px-4 py-3 font-medium">Date</th>
                 <th className="px-4 py-3 font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium">Paid</th>
-                <th className="px-4 py-3 font-medium">Remaining</th>
-                <th className="px-4 py-3 font-medium">Due Date</th>
-                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -206,18 +241,17 @@ export function InvoicesPageContent() {
                   <td className="px-4 py-3">{invoice.studentName}</td>
                   <td className="px-4 py-3">{invoice.billingPeriod}</td>
                   <td className="px-4 py-3">EUR {invoice.amount}</td>
-                  <td className="px-4 py-3">EUR {invoice.paid}</td>
-                  <td className="px-4 py-3">EUR {invoice.remaining}</td>
-                  <td className="px-4 py-3">{invoice.dueDate}</td>
                   <td className="px-4 py-3">
-                    <Badge variant="outline">{invoice.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link href={`/invoices/${invoice.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Open
+                    <div className="flex gap-2">
+                      <Link href={`/invoices/${invoice.id}`}>
+                        <Button variant="ghost" size="sm">
+                          Open
+                        </Button>
+                      </Link>
+                      <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(invoice)}>
+                        Archive
                       </Button>
-                    </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -253,69 +287,129 @@ export function InvoicesPageContent() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogHeader>
           <DialogTitle>Create invoice</DialogTitle>
-          <DialogDescription>Totals are recalculated server-side.</DialogDescription>
+          <DialogDescription>
+            Choose whether the student has already paid or still needs to pay. An email includes the message and the PDF.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <Select
-            value={createState.studentId}
-            onChange={(e) => setCreateState((prev) => ({ ...prev, studentId: e.target.value }))}
-          >
-            <option value="">Select student</option>
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </Select>
-          <Input
-            placeholder="Billing period (e.g. September 2026)"
-            value={createState.billingPeriod}
-            onChange={(e) => setCreateState((prev) => ({ ...prev, billingPeriod: e.target.value }))}
-          />
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="invoice-kind"
+                className="mt-1"
+                checked={createState.kind === 'paid'}
+                onChange={() => setCreateState((prev) => ({ ...prev, kind: 'paid' }))}
+              />
+              <span>
+                <span className="font-medium">Student has paid</span>
+                <span className="mt-0.5 block text-muted-foreground">Email the confirmation and the PDF.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="invoice-kind"
+                className="mt-1"
+                checked={createState.kind === 'due'}
+                onChange={() => setCreateState((prev) => ({ ...prev, kind: 'due' }))}
+              />
+              <span>
+                <span className="font-medium">Invoice for payment</span>
+                <span className="mt-0.5 block text-muted-foreground">Email the bill and ask them to pay.</span>
+              </span>
+            </label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="invoice-student-search">Student</Label>
+            {createState.studentId ? (
+              <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                <span>{createState.studentName}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setCreateState((prev) => ({ ...prev, studentId: '', studentName: '', email: '' }))
+                  }
+                >
+                  Change
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Input
+                  id="invoice-student-search"
+                  placeholder="Search by name, email, or phone"
+                  value={studentQuery}
+                  onChange={(event) => setStudentQuery(event.target.value)}
+                  autoComplete="off"
+                />
+                <div className="max-h-40 overflow-y-auto rounded-md border">
+                  {searchingStudents ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Searching…</p>
+                  ) : studentHits.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No students match that search.</p>
+                  ) : (
+                    studentHits.map((student) => (
+                      <button
+                        key={student.id}
+                        type="button"
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => void selectStudent(student)}
+                      >
+                        {student.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="invoice-date">Date</Label>
             <Input
+              id="invoice-date"
               type="date"
-              value={createState.issueDate}
-              onChange={(e) => setCreateState((prev) => ({ ...prev, issueDate: e.target.value }))}
-            />
-            <Input
-              type="date"
-              value={createState.dueDate}
-              onChange={(e) => setCreateState((prev) => ({ ...prev, dueDate: e.target.value }))}
+              value={createState.date}
+              onChange={(e) => setCreateState((prev) => ({ ...prev, date: e.target.value }))}
             />
           </div>
           <Input
-            placeholder="Item description"
-            value={createState.itemDescription}
-            onChange={(e) => setCreateState((prev) => ({ ...prev, itemDescription: e.target.value }))}
+            placeholder="Description"
+            value={createState.description}
+            onChange={(e) => setCreateState((prev) => ({ ...prev, description: e.target.value }))}
           />
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="invoice-email">
+              {createState.kind === 'paid' ? 'Email the confirmation to' : 'Email the invoice to'}
+            </Label>
             <Input
-              type="number"
-              min="0.01"
-              step="0.01"
-              placeholder="Quantity"
-              value={createState.itemQuantity}
-              onChange={(e) => setCreateState((prev) => ({ ...prev, itemQuantity: e.target.value }))}
+              id="invoice-email"
+              type="email"
+              placeholder="student@email.com"
+              value={createState.email}
+              onChange={(e) => setCreateState((prev) => ({ ...prev, email: e.target.value }))}
             />
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Unit price"
-              value={createState.itemUnitPrice}
-              onChange={(e) => setCreateState((prev) => ({ ...prev, itemUnitPrice: e.target.value }))}
-            />
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Discount"
-              value={createState.discount}
-              onChange={(e) => setCreateState((prev) => ({ ...prev, discount: e.target.value }))}
-            />
+            <p className="text-xs text-muted-foreground">
+              {fillingEmail
+                ? 'Looking up the saved email…'
+                : createState.studentId && !createState.email
+                  ? 'No email is saved for this student. Type one to send the invoice.'
+                  : createState.kind === 'paid'
+                    ? 'Filled from the student. Clear it to save the payment without sending.'
+                    : 'Filled from the student. Clear it to save the invoice without sending.'}
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">Preview total: EUR {quickTotal}</p>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Price"
+            value={createState.price}
+            onChange={(e) => setCreateState((prev) => ({ ...prev, price: e.target.value }))}
+          />
+          <p className="text-sm text-muted-foreground">Total: EUR {previewTotal}</p>
           {createError ? <p className="text-sm text-red-600">{createError}</p> : null}
         </div>
         <DialogFooter>
@@ -324,15 +418,29 @@ export function InvoicesPageContent() {
           </Button>
           <Button
             onClick={() => void handleCreate()}
-            disabled={
-              !createState.studentId ||
-              !createState.billingPeriod.trim() ||
-              !createState.itemDescription.trim() ||
-              !createState.itemUnitPrice
-            }
+            disabled={!createState.studentId || !createState.date || !createState.description.trim() || !createState.price}
           >
-            Create
+            {createState.email.trim()
+              ? createState.kind === 'paid'
+                ? 'Save and send'
+                : 'Create and send'
+              : 'Create'}
           </Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={Boolean(archiveTarget)} onOpenChange={() => setArchiveTarget(null)}>
+        <DialogHeader>
+          <DialogTitle>Archive invoice</DialogTitle>
+          <DialogDescription>
+            Archive {archiveTarget ? `${archiveTarget.invoiceNumber} for ${archiveTarget.studentName}` : 'this invoice'}?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setArchiveTarget(null)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleArchive()}>Archive</Button>
         </DialogFooter>
       </Dialog>
     </div>

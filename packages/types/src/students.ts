@@ -69,6 +69,7 @@ export interface StudentAttendanceSummary {
   sessionDate: string;
   groupName: string;
   status: string;
+  notes: string | null;
 }
 
 export interface StudentInvoiceSummary {
@@ -85,6 +86,7 @@ export interface StudentPaymentSummary {
   amount: string;
   method: string;
   paymentDate: string;
+  notes: string | null;
 }
 
 export interface StudentCertificateSummary {

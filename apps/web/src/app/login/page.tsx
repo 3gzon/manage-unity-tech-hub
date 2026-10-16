@@ -33,12 +33,14 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-lg border p-8 shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Unity Tech Hub
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold">Sign in</h1>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#020D23] p-6">
+      <div className="pointer-events-none absolute -left-16 top-8 h-72 w-72 rounded-full bg-[#046bd2]/50 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-[#00FF88]/25 blur-3xl" />
+      <div className="pointer-events-none absolute right-16 top-16 h-40 w-40 rounded-full bg-[#F50057]/25 blur-3xl" />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <div className="h-1.5 w-20 rounded-full bg-gradient-to-r from-[#046bd2] via-[#00FF88] to-[#F50057]" />
+        <p className="mt-5 text-sm font-medium text-[#046bd2]">Unity Tech Hub</p>
+        <h1 className="mt-2 text-2xl font-bold text-[#020D23]">Sign in</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Use your staff credentials to access the management platform.
         </p>
@@ -80,7 +82,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            className="w-full rounded-md bg-[#046bd2] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>

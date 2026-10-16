@@ -5,6 +5,7 @@ import type {
   GenerateSessionsRequest,
   GenerateSessionsResponse,
   GroupAttendanceResponse,
+  SaveGroupAttendanceRequest,
   InstructorScheduleQuery,
   InstructorScheduleResponse,
   SessionAttendanceResponse,
@@ -27,12 +28,20 @@ export function fetchGroupAttendance(groupId: string) {
   return api.get<GroupAttendanceResponse>(`groups/${groupId}/attendance`);
 }
 
+export function saveGroupAttendance(groupId: string, data: SaveGroupAttendanceRequest) {
+  return api.put<GroupAttendanceResponse>(`groups/${groupId}/attendance`, data);
+}
+
 export function fetchGroupSessions(groupId: string, query: ClassSessionListQuery = {}) {
   return api.get<ClassSessionListResponse>(`groups/${groupId}/sessions`, { params: query });
 }
 
 export function createGroupSession(groupId: string, data: CreateClassSessionRequest) {
   return api.post(`groups/${groupId}/sessions`, data);
+}
+
+export function deleteGroupSession(groupId: string, sessionId: string) {
+  return api.delete<{ deleted: boolean }>(`groups/${groupId}/sessions/${sessionId}`);
 }
 
 export function generateGroupSessions(groupId: string, data: GenerateSessionsRequest) {

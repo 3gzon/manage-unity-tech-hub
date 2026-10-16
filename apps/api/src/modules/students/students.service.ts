@@ -86,16 +86,7 @@ export class StudentsService {
     const where: Prisma.StudentWhereInput = {
       ...accessFilter,
       ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { firstName: { contains: query.search, mode: 'insensitive' } },
-              { lastName: { contains: query.search, mode: 'insensitive' } },
-              { email: { contains: query.search, mode: 'insensitive' } },
-              { phone: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      ...studentNameSearch(query.search),
       ...(query.courseId || query.groupId
         ? {
             enrollments: {
@@ -548,9 +539,10 @@ export class StudentsService {
     attendances: Array<{
       id: string;
       status: string;
+      notes: string | null;
       classSession: { sessionDate: Date; group: { name: string } };
     }>;
-    payments: Array<{ id: string; amount: Prisma.Decimal; method: string; paymentDate: Date }>;
+    payments: Array<{ id: string; amount: Prisma.Decimal; method: string; paymentDate: Date; notes: string | null }>;
     certificates: Array<{ id: string; certificateCode: string; issuedDate: Date; course: { name: string } }>;
     family: {
       id: string;
@@ -607,6 +599,7 @@ export class StudentsService {
         sessionDate: record.classSession.sessionDate.toISOString().slice(0, 10),
         groupName: record.classSession.group.name,
         status: record.status,
+        notes: record.notes,
       })),
     };
 
@@ -624,6 +617,7 @@ export class StudentsService {
         amount: Number(payment.amount).toFixed(2),
         method: payment.method,
         paymentDate: payment.paymentDate.toISOString().slice(0, 10),
+        notes: payment.notes,
       }));
       profile.certificates = student.certificates.map((cert) => ({
         id: cert.id,
@@ -703,6 +697,21 @@ export class StudentsService {
 
     return error instanceof Error ? error.message : 'Could not create this student';
   }
+}
+
+function studentNameSearch(search?: string): Prisma.StudentWhereInput {
+  const terms = search?.trim().split(/\s+/).filter(Boolean) ?? [];
+  if (!terms.length) return {};
+  return {
+    AND: terms.map((term) => ({
+      OR: [
+        { firstName: { contains: term, mode: 'insensitive' as const } },
+        { lastName: { contains: term, mode: 'insensitive' as const } },
+        { email: { contains: term, mode: 'insensitive' as const } },
+        { phone: { contains: term, mode: 'insensitive' as const } },
+      ],
+    })),
+  };
 }
 
 function phoneKey(phone?: string | null) {

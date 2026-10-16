@@ -6,7 +6,6 @@ import {
   BookOpen,
   CalendarDays,
   ClipboardList,
-  CreditCard,
   FileSignature,
   FileText,
   GraduationCap,
@@ -90,16 +89,10 @@ const adminSections: NavSection[] = [
     label: 'Finance',
     items: [
       {
-        title: 'Payments',
-        href: '/payments',
-        icon: CreditCard,
-        visible: (user) => hasPermission(user, 'payments.read'),
-      },
-      {
         title: 'Invoices',
         href: '/invoices',
         icon: FileText,
-        visible: (user) => hasPermission(user, 'invoices.read'),
+        visible: (user) => hasAnyPermission(user, 'invoices.read', 'payments.read'),
       },
       {
         title: 'Expenses',
@@ -175,7 +168,7 @@ const instructorSections: NavSection[] = [
         visible: (user) => hasPermission(user, 'groups.read'),
       },
       {
-        title: "Today's Classes",
+        title: 'Attendance',
         href: '/attendance',
         icon: ClipboardList,
         visible: (user) => hasPermission(user, 'attendance.read'),

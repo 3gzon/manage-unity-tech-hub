@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import type { InstructorListItem, InstructorListQuery, InstructorLookups } from '@unity/types';
+import type { InstructorListItem, InstructorListQuery } from '@unity/types';
 import {
   archiveInstructor,
   createInstructor,
-  fetchInstructorLookups,
   fetchInstructors,
   updateInstructor,
 } from '@/lib/instructors-api';
@@ -17,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState, ErrorState } from '@/components/dashboard/dashboard-states';
-import { Input, Label, Select, Textarea } from '@/components/ui/input';
+import { Input, Label } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function emptyForm() {
@@ -26,9 +25,7 @@ function emptyForm() {
     lastName: '',
     email: '',
     phone: '',
-    bio: '',
-    hireDate: '',
-    userId: '',
+    password: '',
   };
 }
 
@@ -40,7 +37,6 @@ export function InstructorsPageContent() {
   const [query, setQuery] = useState<InstructorListQuery>({ page: 1, pageSize: 20 });
   const [instructors, setInstructors] = useState<InstructorListItem[]>([]);
   const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
-  const [lookups, setLookups] = useState<InstructorLookups>({ linkableUsers: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,23 +60,10 @@ export function InstructorsPageContent() {
     }
   }, [query]);
 
-  const loadLookups = useCallback(async () => {
-    try {
-      setLookups(await fetchInstructorLookups());
-    } catch {
-      setLookups({ linkableUsers: [] });
-    }
-  }, []);
-
   useEffect(() => {
     if (!allowed) return;
     void load();
   }, [allowed, load]);
-
-  useEffect(() => {
-    if (!allowed) return;
-    void loadLookups();
-  }, [allowed, loadLookups]);
 
   function openCreate() {
     setEditing(null);
@@ -96,9 +79,7 @@ export function InstructorsPageContent() {
       lastName: instructor.lastName,
       email: instructor.email,
       phone: instructor.phone ?? '',
-      bio: instructor.bio ?? '',
-      hireDate: instructor.hireDate ?? '',
-      userId: instructor.userId ?? '',
+      password: '',
     });
     setFormError(null);
     setFormOpen(true);
@@ -111,20 +92,17 @@ export function InstructorsPageContent() {
       lastName: form.lastName.trim(),
       email: form.email.trim(),
       phone: form.phone.trim() || undefined,
-      bio: form.bio.trim() || undefined,
-      hireDate: form.hireDate || undefined,
-      userId: form.userId || null,
     };
 
     try {
       if (editing) {
         await updateInstructor(editing.id, payload);
       } else {
-        await createInstructor(payload);
+        await createInstructor({ ...payload, password: form.password });
       }
       setFormOpen(false);
       setEditing(null);
-      await Promise.all([load(), loadLookups()]);
+      await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not save instructor');
     }
@@ -135,19 +113,12 @@ export function InstructorsPageContent() {
     try {
       await archiveInstructor(archiveTarget.id);
       setArchiveTarget(null);
-      await Promise.all([load(), loadLookups()]);
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not archive instructor');
       setArchiveTarget(null);
     }
   }
-
-  const linkableUsers = editing?.userId
-    ? [
-        { id: editing.userId, name: editing.userName ?? 'Linked user', email: editing.userEmail ?? '' },
-        ...lookups.linkableUsers.filter((item) => item.id !== editing.userId),
-      ]
-    : lookups.linkableUsers;
 
   if (!allowed) {
     return (
@@ -164,7 +135,7 @@ export function InstructorsPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Instructors</h1>
           <p className="text-sm text-muted-foreground">
-            Create instructor profiles and assign them to groups. Link a login account when they need portal access.
+            Add a name, email, phone, and password. They sign in with that email.
           </p>
         </div>
         {canManage ? (
@@ -200,7 +171,6 @@ export function InstructorsPageContent() {
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Linked User</th>
                 <th className="px-4 py-3 font-medium">Active Groups</th>
                 <th className="px-4 py-3 font-medium">Hire Date</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
@@ -216,7 +186,6 @@ export function InstructorsPageContent() {
                   </td>
                   <td className="px-4 py-3">{instructor.email}</td>
                   <td className="px-4 py-3">{instructor.phone ?? '—'}</td>
-                  <td className="px-4 py-3">{instructor.userName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <Badge variant="outline">{instructor.activeGroupsCount}</Badge>
                   </td>
@@ -275,7 +244,9 @@ export function InstructorsPageContent() {
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit instructor' : 'Add instructor'}</DialogTitle>
           <DialogDescription>
-            Instructor profiles are assigned to groups. Linking a user account controls portal access.
+            {editing
+              ? 'Name, email, and phone are enough.'
+              : 'This also creates their sign-in. Password must be at least 8 characters.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 md:grid-cols-2">
@@ -305,36 +276,16 @@ export function InstructorsPageContent() {
             <Label>Phone</Label>
             <Input value={form.phone} onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))} />
           </div>
-          <div className="space-y-1">
-            <Label>Hire date</Label>
-            <Input
-              type="date"
-              value={form.hireDate}
-              onChange={(e) => setForm((prev) => ({ ...prev, hireDate: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <Label>Linked user</Label>
-            <Select
-              value={form.userId}
-              onChange={(e) => setForm((prev) => ({ ...prev, userId: e.target.value }))}
-            >
-              <option value="">None</option>
-              {linkableUsers.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} ({item.email})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <Label>Bio</Label>
-            <Textarea
-              value={form.bio}
-              onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))}
-              placeholder="Optional"
-            />
-          </div>
+          {!editing ? (
+            <div className="space-y-1">
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+              />
+            </div>
+          ) : null}
           {formError ? <p className="text-sm text-red-600 md:col-span-2">{formError}</p> : null}
         </div>
         <DialogFooter>
@@ -343,7 +294,12 @@ export function InstructorsPageContent() {
           </Button>
           <Button
             onClick={() => void handleSave()}
-            disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()}
+            disabled={
+              !form.firstName.trim() ||
+              !form.lastName.trim() ||
+              !form.email.trim() ||
+              (!editing && form.password.length < 8)
+            }
           >
             {editing ? 'Save changes' : 'Create instructor'}
           </Button>

@@ -36,10 +36,10 @@ export function NotificationBell() {
 
   return (
     <Link href="/notifications">
-      <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+      <Button variant="ghost" size="icon" className="relative rounded-full bg-slate-50 hover:bg-slate-100" aria-label="Notifications">
         <Bell className="h-4 w-4" />
         {unreadCount > 0 ? (
-          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F50057] px-1 text-[10px] font-medium text-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         ) : null}

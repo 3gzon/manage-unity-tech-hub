@@ -11,7 +11,8 @@ import type {
   InstructorLookups,
   InstructorOption,
 } from '@unity/types';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserStatus } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
@@ -130,21 +131,63 @@ export class InstructorsService {
 
   async create(user: AuthenticatedUser, dto: CreateInstructorDto): Promise<InstructorDetail> {
     const email = dto.email.trim().toLowerCase();
+    const firstName = dto.firstName.trim();
+    const lastName = dto.lastName.trim();
+    const phone = dto.phone?.trim() || null;
     await this.assertEmailAvailable(email);
-    await this.assertLinkableUser(dto.userId);
+
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser && !existingUser.deletedAt) {
+      throw new ConflictException('A user with this email already exists');
+    }
+
+    const role = await this.prisma.role.findUnique({ where: { name: 'INSTRUCTOR' } });
+    if (!role) {
+      throw new BadRequestException('Instructor role is not configured');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
 
     try {
-      const created = await this.prisma.instructor.create({
-        data: {
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-          email,
-          phone: dto.phone?.trim() || null,
-          bio: dto.bio?.trim() || null,
-          hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
-          userId: dto.userId || null,
-        },
-        include: instructorInclude,
+      const created = await this.prisma.$transaction(async (tx) => {
+        const account = existingUser
+          ? await tx.user.update({
+              where: { id: existingUser.id },
+              data: {
+                firstName,
+                lastName,
+                passwordHash,
+                phone,
+                status: UserStatus.ACTIVE,
+                deletedAt: null,
+              },
+            })
+          : await tx.user.create({
+              data: {
+                email,
+                firstName,
+                lastName,
+                passwordHash,
+                phone,
+                status: UserStatus.ACTIVE,
+              },
+            });
+
+        await tx.userRole.deleteMany({ where: { userId: account.id } });
+        await tx.userRole.create({ data: { userId: account.id, roleId: role.id } });
+
+        return tx.instructor.create({
+          data: {
+            firstName,
+            lastName,
+            email,
+            phone,
+            bio: dto.bio?.trim() || null,
+            hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
+            userId: account.id,
+          },
+          include: instructorInclude,
+        });
       });
 
       await this.audit.record({
@@ -208,13 +251,26 @@ export class InstructorsService {
   async archive(user: AuthenticatedUser, id: string) {
     const instructor = await this.requireInstructor(id);
 
-    await this.prisma.instructor.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        userId: null,
-        email: `archived.${id}.${instructor.email}`,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      if (instructor.userId) {
+        await tx.user.update({
+          where: { id: instructor.userId },
+          data: { status: UserStatus.DISABLED },
+        });
+        await tx.refreshToken.updateMany({
+          where: { userId: instructor.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+
+      await tx.instructor.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          userId: null,
+          email: `archived.${id}.${instructor.email}`,
+        },
+      });
     });
 
     await this.audit.record({

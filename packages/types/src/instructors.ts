@@ -42,13 +42,14 @@ export interface CreateInstructorRequest {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
   phone?: string;
   bio?: string;
   hireDate?: string;
   userId?: string | null;
 }
 
-export type UpdateInstructorRequest = Partial<CreateInstructorRequest>;
+export type UpdateInstructorRequest = Partial<Omit<CreateInstructorRequest, 'password'>>;
 
 export interface InstructorOption {
   id: string;

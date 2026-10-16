@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
@@ -27,5 +27,15 @@ export class GroupSessionsController {
     @Body() dto: CreateClassSessionDto,
   ) {
     return this.sessionsService.createGroupSession(user, groupId, dto);
+  }
+
+  @Delete(':sessionId')
+  @Permissions('attendance.manage')
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId') groupId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.sessionsService.deleteGroupSession(user, groupId, sessionId);
   }
 }

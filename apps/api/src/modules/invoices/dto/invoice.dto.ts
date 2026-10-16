@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsEmail,
   IsEnum,
   IsIn,
   IsInt,
@@ -142,6 +143,11 @@ export class UpdateInvoiceDto {
   @IsOptional()
   @IsEnum(InvoiceStatus)
   status?: InvoiceStatus;
+}
+
+export class SendInvoiceEmailDto {
+  @IsEmail()
+  email!: string;
 }
 
 export class GenerateMonthlyInvoicesDto {

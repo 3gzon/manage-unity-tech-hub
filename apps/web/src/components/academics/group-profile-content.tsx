@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import type { GroupDetail, InstructorOption } from '@unity/types';
-import { DAY_LABELS } from '@unity/types';
-import { fetchGroup, updateGroup, updateGroupSchedule } from '@/lib/academics-api';
+import type { ClassSessionListItem, GroupDetail, InstructorOption } from '@unity/types';
+import { fetchGroup, updateGroup } from '@/lib/academics-api';
+import { createGroupSession, deleteGroupSession, fetchGroupSessions } from '@/lib/attendance-api';
 import { fetchInstructorOptions } from '@/lib/instructors-api';
 import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input, Select } from '@/components/ui/input';
+import { Select } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/dashboard/dashboard-states';
+import { DayClasses, sessionCounts } from '@/components/attendance/day-classes';
 import { GroupClassPresence } from '@/components/attendance/group-class-presence';
+import { MonthCalendar, parseDateInput, toDateInputValue } from '@/components/ui/month-calendar';
 
 export function GroupProfileContent() {
   const params = useParams<{ id: string }>();
@@ -30,13 +32,10 @@ export function GroupProfileContent() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [instructorId, setInstructorId] = useState('');
   const [assignError, setAssignError] = useState<string | null>(null);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleRoom, setScheduleRoom] = useState('');
-  const [scheduleRows, setScheduleRows] = useState<
-    Array<{ dayOfWeek: number; startTime: string; endTime: string; sessionDate: string }>
-  >([]);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleMonth, setScheduleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [pickedDate, setPickedDate] = useState(() => toDateInputValue(new Date()));
+  const [sessions, setSessions] = useState<ClassSessionListItem[]>([]);
+  const [sessionsVersion, setSessionsVersion] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,12 +53,40 @@ export function GroupProfileContent() {
     void load();
   }, [load]);
 
+  const monthKey = `${scheduleMonth.getFullYear()}-${scheduleMonth.getMonth()}`;
+
+  useEffect(() => {
+    if (!params.id) return;
+    const fromDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth(), 1));
+    const toDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth() + 1, 0));
+    void fetchGroupSessions(params.id, { page: 1, pageSize: 100, fromDate, toDate })
+      .then((response) => setSessions(response.data))
+      .catch(() => setSessions([]));
+  }, [params.id, monthKey, scheduleMonth, sessionsVersion]);
+
   useEffect(() => {
     if (!canManage) return;
     void fetchInstructorOptions()
       .then(setInstructors)
       .catch(() => setInstructors([]));
   }, [canManage]);
+
+  const daySessions = sessions.filter((session) => session.sessionDate.slice(0, 10) === pickedDate);
+
+  async function saveClass(input: { groupId: string; sessionId?: string; startTime: string; endTime: string }) {
+    await createGroupSession(input.groupId, {
+      sessionId: input.sessionId,
+      sessionDate: pickedDate,
+      startTime: input.startTime,
+      endTime: input.endTime,
+    });
+    setSessionsVersion((version) => version + 1);
+  }
+
+  async function removeClass(input: { groupId: string; sessionId: string }) {
+    await deleteGroupSession(input.groupId, input.sessionId);
+    setSessionsVersion((version) => version + 1);
+  }
 
   async function handleAssign() {
     if (!group) return;
@@ -102,29 +129,6 @@ export function GroupProfileContent() {
             {group.instructorId ? 'Change instructor' : 'Assign instructor'}
           </Button>
         ) : null}
-        {canEditSchedule ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setScheduleRoom(group.room ?? '');
-              setScheduleRows(
-                group.schedules.length
-                  ? group.schedules.map((slot) => ({
-                      dayOfWeek: slot.dayOfWeek,
-                      startTime: slot.startTime,
-                      endTime: slot.endTime,
-                      sessionDate: nextDateForWeekday(slot.dayOfWeek),
-                    }))
-                  : [emptyScheduleRow()],
-              );
-              setScheduleError(null);
-              setScheduleOpen(true);
-            }}
-          >
-            {group.schedules.length ? 'Edit class times' : 'Set class times'}
-          </Button>
-        ) : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -148,19 +152,27 @@ export function GroupProfileContent() {
       </div>
 
       <section>
-        <h2 className="mb-2 text-lg font-medium">Schedule</h2>
-        <div className="space-y-2">
-          {group.schedules.length ? (
-            group.schedules.map((s) => (
-              <div key={s.id} className="rounded-md border px-4 py-3 text-sm">
-                {s.dayLabel} · {s.startTime} – {s.endTime}
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No class times yet. Set them so this group appears on My Schedule.
-            </p>
-          )}
+        <h2 className="mb-3 text-lg font-medium">Schedule</h2>
+        <MonthCalendar
+          month={scheduleMonth}
+          onMonthChange={setScheduleMonth}
+          selected={[pickedDate]}
+          counts={sessionCounts(sessions)}
+          onSelect={setPickedDate}
+        />
+        <div className="mt-4">
+          <DayClasses
+            dateLabel={parseDateInput(pickedDate).toLocaleDateString(undefined, {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            })}
+            sessions={daySessions}
+            groupId={group.id}
+            canEdit={canEditSchedule}
+            onSave={saveClass}
+            onRemove={removeClass}
+          />
         </div>
       </section>
 
@@ -177,18 +189,42 @@ export function GroupProfileContent() {
       ) : null}
 
       <section>
+        <h2 className="mb-2 text-lg font-medium">Waiting to start</h2>
+        <div className="space-y-2">
+          {(group.enrollments ?? [])
+            .filter((enrollment) => enrollment.status === 'PENDING')
+            .map((enrollment) => (
+              <div key={enrollment.id} className="rounded-md border px-4 py-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <Link href={`/students/${enrollment.studentId}`} className="hover:underline">
+                    {enrollment.studentName}
+                  </Link>
+                  <span className="text-muted-foreground">{enrollment.startDate}</span>
+                </div>
+                <p className="mt-1 text-muted-foreground">{enrollment.notes || 'No comment yet.'}</p>
+              </div>
+            ))}
+          {!(group.enrollments ?? []).some((enrollment) => enrollment.status === 'PENDING') ? (
+            <p className="text-sm text-muted-foreground">No students are waiting to start.</p>
+          ) : null}
+        </div>
+      </section>
+
+      <section>
         <h2 className="mb-2 text-lg font-medium">Enrolled students</h2>
         <div className="space-y-2">
-          {(group.enrollments ?? []).map((e) => (
-            <div key={e.id} className="flex items-center justify-between rounded-md border px-4 py-3 text-sm">
-              <Link href={`/students/${e.studentId}`} className="hover:underline">
-                {e.studentName}
-              </Link>
-              <Badge variant="outline">{e.status}</Badge>
-            </div>
-          ))}
-          {!group.enrollments?.length ? (
-            <p className="text-sm text-muted-foreground">No enrollments yet.</p>
+          {(group.enrollments ?? [])
+            .filter((enrollment) => enrollment.status === 'ACTIVE')
+            .map((enrollment) => (
+              <div key={enrollment.id} className="flex items-center justify-between rounded-md border px-4 py-3 text-sm">
+                <Link href={`/students/${enrollment.studentId}`} className="hover:underline">
+                  {enrollment.studentName}
+                </Link>
+                <Badge variant="outline">Active</Badge>
+              </div>
+            ))}
+          {!(group.enrollments ?? []).some((enrollment) => enrollment.status === 'ACTIVE') ? (
+            <p className="text-sm text-muted-foreground">No students have started yet.</p>
           ) : null}
         </div>
       </section>
@@ -196,7 +232,7 @@ export function GroupProfileContent() {
       <section>
         <h2 className="mb-2 text-lg font-medium">Class attendance</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Whether each student was in class for this group.
+          Students are listed down the side. Each class day is a column.
         </p>
         <GroupClassPresence groupId={group.id} />
       </section>
@@ -234,146 +270,8 @@ export function GroupProfileContent() {
         </DialogFooter>
       </Dialog>
 
-      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
-        <DialogHeader>
-          <DialogTitle>Class times</DialogTitle>
-          <DialogDescription>Set the date and time for each class. They will show on My Schedule.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <Input
-            placeholder="Room"
-            value={scheduleRoom}
-            onChange={(e) => setScheduleRoom(e.target.value)}
-          />
-          {scheduleRows.map((row, index) => (
-            <div key={`${row.sessionDate}-${index}`} className="space-y-2 rounded-lg border p-3">
-              <div className="grid gap-2 md:grid-cols-[1.2fr_1fr_1fr_auto]">
-                <Input
-                  type="date"
-                  value={row.sessionDate}
-                  onChange={(e) =>
-                    setScheduleRows((current) =>
-                      current.map((item, itemIndex) =>
-                        itemIndex === index ? rowFromDate(item, e.target.value) : item,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  type="time"
-                  value={row.startTime}
-                  onChange={(e) =>
-                    setScheduleRows((current) =>
-                      current.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, startTime: e.target.value } : item,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  type="time"
-                  value={row.endTime}
-                  onChange={(e) =>
-                    setScheduleRows((current) =>
-                      current.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, endTime: e.target.value } : item,
-                      ),
-                    )
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setScheduleRows((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                >
-                  Remove
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{DAY_LABELS[row.dayOfWeek] ?? 'Pick a date'}</p>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setScheduleRows((current) => [...current, emptyScheduleRow()])}
-          >
-            Add class time
-          </Button>
-          {scheduleError ? <p className="text-sm text-red-600">{scheduleError}</p> : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setScheduleOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={scheduleSaving}
-            onClick={() => {
-              void (async () => {
-                if (!group) return;
-                setScheduleSaving(true);
-                setScheduleError(null);
-                try {
-                  const schedules = scheduleRows.filter((row) => row.sessionDate && row.startTime && row.endTime);
-                  if (!schedules.length) {
-                    setScheduleError('Add a date and time for at least one class.');
-                    return;
-                  }
-                  const updated = await updateGroupSchedule(group.id, {
-                    room: scheduleRoom.trim() || undefined,
-                    schedules,
-                  });
-                  setGroup(updated);
-                  setScheduleOpen(false);
-                } catch (err) {
-                  setScheduleError(err instanceof Error ? err.message : 'Could not save class times');
-                } finally {
-                  setScheduleSaving(false);
-                }
-              })();
-            }}
-          >
-            Save
-          </Button>
-        </DialogFooter>
-      </Dialog>
     </div>
   );
-}
-
-function emptyScheduleRow() {
-  const sessionDate = toDateInputValue(new Date());
-  return {
-    dayOfWeek: new Date(`${sessionDate}T00:00:00`).getDay(),
-    startTime: '09:00',
-    endTime: '10:30',
-    sessionDate,
-  };
-}
-
-function rowFromDate(
-  row: { dayOfWeek: number; startTime: string; endTime: string; sessionDate: string },
-  sessionDate: string,
-) {
-  return {
-    ...row,
-    sessionDate,
-    dayOfWeek: sessionDate ? new Date(`${sessionDate}T00:00:00`).getDay() : row.dayOfWeek,
-  };
-}
-
-function nextDateForWeekday(dayOfWeek: number): string {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  const diff = (dayOfWeek - date.getDay() + 7) % 7;
-  date.setDate(date.getDate() + diff);
-  return toDateInputValue(date);
-}
-
-function toDateInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function Info({ label, value }: { label: string; value: ReactNode }) {

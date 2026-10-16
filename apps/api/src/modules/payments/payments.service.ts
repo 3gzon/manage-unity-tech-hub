@@ -11,6 +11,7 @@ import { InvoiceStatus, PaymentRecordStatus, Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import type {
   CreatePaymentDto,
   ListPaymentsQueryDto,
@@ -28,6 +29,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly tuition: TuitionQuoteService,
+    private readonly mail: MailService,
   ) {}
 
   async findAll(query: ListPaymentsQueryDto): Promise<PaymentListResponse> {
@@ -126,13 +128,19 @@ export class PaymentsService {
     }
 
     let invoiceId: string | null = null;
+    let invoiceWasPaid = false;
     if (dto.invoiceId) {
       const invoice = await this.assertInvoiceForStudent(dto.invoiceId, dto.studentId);
       if (invoice.status === 'CANCELLED') {
         throw new BadRequestException('Cannot record payment for cancelled invoice');
       }
       invoiceId = invoice.id;
-      await this.assertNoOverpayment(invoice.id, new Prisma.Decimal(dto.amount));
+      invoiceWasPaid = invoice.status === 'PAID';
+      const paying = new Prisma.Decimal(dto.amount).toDecimalPlaces(2);
+      if (paying.lt(invoice.remainingAmount.toDecimalPlaces(2)) && !notes) {
+        throw new BadRequestException('Add a comment explaining why this payment is less than the amount due');
+      }
+      await this.assertNoOverpayment(invoice.id, paying);
     }
 
     const created = await this.prisma.payment.create({
@@ -163,7 +171,15 @@ export class PaymentsService {
       newValue: { invoiceId, amount: dto.amount },
     });
 
-    return this.toDetail(created);
+    const emailNotice = invoiceId
+      ? await this.emailIfNewlyPaid(invoiceId, invoiceWasPaid, {
+          studentId: created.studentId,
+          amount: created.amount,
+          paymentDate: created.paymentDate,
+        })
+      : null;
+
+    return { ...this.toDetail(created), emailNotice };
   }
 
   async update(user: AuthenticatedUser, id: string, dto: UpdatePaymentDto): Promise<PaymentDetail> {
@@ -189,8 +205,10 @@ export class PaymentsService {
     await this.assertUniqueFiscalCoupon(nextFiscalCoupon, id);
 
     let nextInvoiceId = dto.invoiceId === undefined ? existing.invoiceId : dto.invoiceId ?? null;
+    let invoiceWasPaid = false;
     if (nextInvoiceId) {
-      await this.assertInvoiceForStudent(nextInvoiceId, existing.studentId);
+      const invoice = await this.assertInvoiceForStudent(nextInvoiceId, existing.studentId);
+      invoiceWasPaid = invoice.status === 'PAID';
       await this.assertNoOverpayment(nextInvoiceId, nextAmount, id);
     }
 
@@ -221,7 +239,16 @@ export class PaymentsService {
       entityId: id,
     });
 
-    return this.findOne(id);
+    const detail = await this.findOne(id);
+    const emailNotice = nextInvoiceId
+      ? await this.emailIfNewlyPaid(nextInvoiceId, invoiceWasPaid, {
+          studentId: existing.studentId,
+          amount: nextAmount,
+          paymentDate: dto.paidAt ? new Date(dto.paidAt) : existing.paymentDate,
+        })
+      : null;
+
+    return { ...detail, emailNotice };
   }
 
   async void(user: AuthenticatedUser, id: string): Promise<PaymentDetail> {
@@ -448,6 +475,45 @@ export class PaymentsService {
     }
   }
 
+  private async emailIfNewlyPaid(
+    invoiceId: string,
+    wasPaid: boolean,
+    payment: { studentId: string; amount: Prisma.Decimal; paymentDate: Date },
+  ): Promise<string | null> {
+    if (wasPaid) return null;
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, deletedAt: null },
+      select: { status: true, invoiceNumber: true, billingPeriod: true },
+    });
+    if (!invoice || invoice.status !== 'PAID') return null;
+
+    const student = await this.prisma.student.findFirst({
+      where: { id: payment.studentId, deletedAt: null },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+        parents: { select: { parent: { select: { email: true, deletedAt: true } } } },
+      },
+    });
+    if (!student) return 'The payment was saved, but the student could not be emailed.';
+
+    const emails = [
+      student.email,
+      ...student.parents.map((link) => (link.parent.deletedAt ? null : link.parent.email)),
+    ].filter((email): email is string => Boolean(email?.trim()));
+
+    const result = await this.mail.sendPaymentReceipt({
+      to: emails,
+      studentName: `${student.firstName} ${student.lastName}`,
+      invoiceNumber: invoice.invoiceNumber,
+      billingPeriod: invoice.billingPeriod,
+      amount: payment.amount.toFixed(2),
+      paidAt: payment.paymentDate.toISOString().slice(0, 10),
+    });
+    return result.detail;
+  }
+
   private async recalculateInvoice(invoiceId: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, deletedAt: null },
@@ -481,6 +547,7 @@ export class PaymentsService {
     invoice: { id: string; invoiceNumber: string } | null;
     recordedBy: { firstName: string; lastName: string };
     fiscalCoupon?: string | null;
+    notes?: string | null;
   }): PaymentListItem {
     return {
       id: payment.id,
@@ -494,6 +561,7 @@ export class PaymentsService {
       fiscalCoupon: payment.fiscalCoupon ?? null,
       recordedBy: `${payment.recordedBy.firstName} ${payment.recordedBy.lastName}`,
       status: payment.status,
+      notes: payment.notes ?? null,
     };
   }
 

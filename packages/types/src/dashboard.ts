@@ -17,6 +17,7 @@ export interface DashboardPaymentItem {
 
 export interface DashboardClassItem {
   id: string;
+  groupId: string;
   groupName: string;
   courseName: string;
   sessionDate: string;

@@ -15,6 +15,7 @@ export interface PaymentListItem {
   fiscalCoupon: string | null;
   recordedBy: string;
   status: PaymentStatus;
+  notes: string | null;
 }
 
 export interface PaymentDetail extends PaymentListItem {
@@ -23,6 +24,7 @@ export interface PaymentDetail extends PaymentListItem {
   paidAt: string;
   createdAt: string;
   updatedAt: string;
+  emailNotice?: string | null;
 }
 
 export interface TuitionDiscountLine {

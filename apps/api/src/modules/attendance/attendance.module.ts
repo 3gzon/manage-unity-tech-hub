@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../../infrastructure/audit/audit.module';
 import { GroupsModule } from '../groups/groups.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import { AttendanceRecordsService } from './attendance-records.service';
 import { AttendanceTodayController } from './attendance-today.controller';
 import { GroupAttendanceController } from './group-attendance.controller';
@@ -18,6 +19,6 @@ import { SessionsService } from './sessions.service';
     SessionAttendanceController,
     AttendanceTodayController,
   ],
-  providers: [SessionsService, SessionGeneratorService, AttendanceRecordsService],
+  providers: [SessionsService, SessionGeneratorService, AttendanceRecordsService, MailService],
 })
 export class AttendanceModule {}

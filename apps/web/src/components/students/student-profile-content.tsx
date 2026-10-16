@@ -68,7 +68,7 @@ export function StudentProfileContent() {
   }, [canUpdate]);
 
   const tabs = isAdmin
-    ? ['overview', 'enrollments', 'attendance', 'invoices', 'payments', 'certificates', 'notes']
+    ? ['overview', 'enrollments', 'attendance', 'invoices', 'payments', 'certificates', 'comments']
     : ['overview', 'enrollments', 'attendance'];
 
   async function handleUpdate(values: StudentFormValues) {
@@ -224,7 +224,7 @@ export function StudentProfileContent() {
       {tab === 'attendance' ? (
         <ListPanel
           empty="No attendance records"
-          items={profile.attendance.map((a) => `${a.sessionDate} · ${a.groupName} · ${a.status}`)}
+          items={profile.attendance.map((a) => `${a.sessionDate} · ${a.groupName} · ${a.status}${a.notes ? ` · ${a.notes}` : ''}`)}
         />
       ) : null}
 
@@ -238,7 +238,7 @@ export function StudentProfileContent() {
       {isAdmin && tab === 'payments' ? (
         <ListPanel
           empty="No payments"
-          items={(profile.payments ?? []).map((p) => `${p.paymentDate} · €${p.amount} · ${p.method}`)}
+          items={(profile.payments ?? []).map((p) => `${p.paymentDate} · €${p.amount} · ${p.method}${p.notes ? ` · ${p.notes}` : ''}`)}
         />
       ) : null}
 
@@ -249,8 +249,8 @@ export function StudentProfileContent() {
         />
       ) : null}
 
-      {tab === 'notes' ? (
-        <div className="rounded-xl border p-4 text-sm">{student.notes || 'No notes yet.'}</div>
+      {tab === 'comments' ? (
+        <div className="rounded-xl border p-4 text-sm">{student.notes || 'No comments yet.'}</div>
       ) : null}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

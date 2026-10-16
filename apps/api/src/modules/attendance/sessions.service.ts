@@ -82,9 +82,7 @@ export class SessionsService {
     dto: CreateClassSessionDto,
   ): Promise<ClassSessionDetail | GenerateSessionsResponse> {
     await this.access.assertCanAccessGroup(user, groupId);
-    if (!this.access.isAdmin(user)) {
-      throw new ForbiddenException('Only administrators can create sessions manually');
-    }
+    this.assertCanManageAttendance(user);
 
     if (dto.generateFromSchedule || (dto.fromDate && dto.toDate)) {
       if (!dto.fromDate || !dto.toDate) {
@@ -108,11 +106,29 @@ export class SessionsService {
     if (!dto.sessionDate || !dto.startTime || !dto.endTime) {
       throw new BadRequestException('sessionDate, startTime, and endTime are required');
     }
+    assertClassTime(dto.startTime, dto.endTime);
+
+    const sessionDate = new Date(`${dto.sessionDate}T00:00:00.000Z`);
+    if (dto.sessionId) {
+      const current = await this.prisma.classSession.findFirst({
+        where: { id: dto.sessionId, groupId },
+      });
+      if (!current) throw new NotFoundException('Session not found');
+      await this.assertStartTimeFree(groupId, sessionDate, dto.startTime, current.id);
+      const updated = await this.prisma.classSession.update({
+        where: { id: current.id },
+        data: { startTime: dto.startTime, endTime: dto.endTime },
+        include: { group: { include: { course: true } } },
+      });
+      return this.toDetail(updated);
+    }
+
+    await this.assertStartTimeFree(groupId, sessionDate, dto.startTime);
 
     const session = await this.prisma.classSession.create({
       data: {
         groupId,
-        sessionDate: new Date(dto.sessionDate),
+        sessionDate,
         startTime: dto.startTime,
         endTime: dto.endTime,
         status: dto.status ?? 'SCHEDULED',
@@ -131,6 +147,35 @@ export class SessionsService {
     });
 
     return this.toDetail(session);
+  }
+
+  async deleteGroupSession(user: AuthenticatedUser, groupId: string, sessionId: string) {
+    await this.access.assertCanAccessGroup(user, groupId);
+    this.assertCanManageAttendance(user);
+    const session = await this.prisma.classSession.findFirst({
+      where: { id: sessionId, groupId },
+      include: { attendances: { select: { id: true }, take: 1 } },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.attendanceSubmittedAt || session.attendances.length > 0) {
+      throw new BadRequestException('This class already has attendance, so it cannot be removed');
+    }
+    await this.prisma.classSession.delete({ where: { id: session.id } });
+    return { deleted: true };
+  }
+
+  private async assertStartTimeFree(groupId: string, sessionDate: Date, startTime: string, exceptId?: string) {
+    const clash = await this.prisma.classSession.findFirst({
+      where: {
+        groupId,
+        sessionDate,
+        startTime,
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+    });
+    if (clash) {
+      throw new BadRequestException('This group already has a class at that start time');
+    }
   }
 
   async listTodayClasses(user: AuthenticatedUser, query: ListTodaySessionsQueryDto): Promise<TodayClassItem[]> {
@@ -361,6 +406,17 @@ function parseDateOnly(value: string): Date {
   const date = new Date(`${value}T00:00:00`);
   date.setHours(0, 0, 0, 0);
   return date;
+}
+
+const CLASS_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function assertClassTime(startTime: string, endTime: string) {
+  if (!CLASS_TIME.test(startTime) || !CLASS_TIME.test(endTime)) {
+    throw new BadRequestException('Choose a start and end time, like 18:30');
+  }
+  if (startTime >= endTime) {
+    throw new BadRequestException('End time must be after the start time');
+  }
 }
 
 function toDateOnly(date: Date): string {

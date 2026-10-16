@@ -287,7 +287,7 @@ export function StudentForm({
       </div>
 
       <div>
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="notes">Comments</Label>
         <Textarea
           id="notes"
           aria-invalid={invalid('notes')}

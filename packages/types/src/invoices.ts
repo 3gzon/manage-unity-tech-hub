@@ -41,6 +41,7 @@ export interface InvoiceDetail {
   invoiceNumber: string;
   studentId: string;
   studentName: string;
+  studentEmail: string | null;
   issueDate: string;
   dueDate: string;
   billingPeriod: string;
@@ -64,6 +65,7 @@ export interface InvoicePaymentItem {
   method: 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'OTHER';
   fiscalCoupon: string | null;
   status: 'ACTIVE' | 'VOIDED';
+  notes: string | null;
 }
 
 export interface GenerateMonthlyInvoicesRequest {
@@ -97,6 +99,15 @@ export interface CreateInvoiceRequest {
 export type UpdateInvoiceRequest = Partial<CreateInvoiceRequest> & {
   status?: InvoiceStatus;
 };
+
+export interface SendInvoiceEmailRequest {
+  email: string;
+}
+
+export interface SendInvoiceEmailResponse {
+  sentTo: string[];
+  detail: string;
+}
 
 export interface RecordInvoicePaymentRequest {
   amount: number;
