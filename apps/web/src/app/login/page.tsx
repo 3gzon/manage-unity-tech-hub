@@ -10,7 +10,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('superadmin@unitytechhub.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('confirmed') === '1') setNotice('Account confirmed. Sign in with your new password.');
+    if (params.get('reset') === '1') setNotice('Password updated. Sign in with your new password.');
+  }, []);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -77,6 +84,7 @@ export default function LoginPage() {
             />
           </div>
 
+          {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <button
@@ -86,6 +94,11 @@ export default function LoginPage() {
           >
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>
+          <p className="text-center text-sm">
+            <a href="/forgot-password" className="text-[#046bd2] hover:underline">
+              Forgot password?
+            </a>
+          </p>
         </form>
       </div>
     </main>

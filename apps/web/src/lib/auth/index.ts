@@ -1,2 +1,2 @@
-export { hasAnyPermission, hasPermission, hasRole, isAdmin, isInstructor, isSuperAdmin } from './authorization';
+export { hasAnyPermission, hasPermission, hasRole, isInstructor, isSuperAdmin } from './authorization';
 export { useAuth } from './auth-context';

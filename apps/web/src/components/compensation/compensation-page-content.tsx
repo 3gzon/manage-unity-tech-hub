@@ -22,7 +22,7 @@ import {
   saveCompensationSnapshot,
   updateCompensationStatus,
 } from '@/lib/compensation-api';
-import { hasPermission, hasRole } from '@/lib/auth/authorization';
+import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,7 +53,7 @@ function statusVariant(status: CompensationStatus | null) {
 
 export function CompensationPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN');
+  const allowed = isAdminPortalUser(user);
   const canManage = hasPermission(user, 'compensation.manage');
 
   const [tab, setTab] = useState<Tab>('calculator');

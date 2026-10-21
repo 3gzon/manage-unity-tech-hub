@@ -5,7 +5,7 @@ import { ListAuditLogsQueryDto } from './dto/audit-log.dto';
 import { AuditLogsService } from './audit-logs.service';
 
 @Controller('audit-logs')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN')
 export class AuditLogsController {
   constructor(private readonly auditLogsService: AuditLogsService) {}
 

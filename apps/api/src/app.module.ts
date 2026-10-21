@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { BranchContextGuard } from './common/branch/branch-context.guard';
+import { BranchContextMiddleware } from './common/branch/branch-context.middleware';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -24,6 +26,7 @@ import { InstructorsModule } from './modules/instructors/instructors.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { MaterialsModule } from './modules/materials/materials.module';
 import { AuditModule } from './infrastructure/audit/audit.module';
 import { PrismaModule } from './infrastructure/database/prisma/prisma.module';
 
@@ -57,6 +60,7 @@ import { PrismaModule } from './infrastructure/database/prisma/prisma.module';
     NotificationsModule,
     ContractsModule,
     SettingsModule,
+    MaterialsModule,
   ],
   providers: [
     {
@@ -75,6 +79,14 @@ import { PrismaModule } from './infrastructure/database/prisma/prisma.module';
       provide: APP_GUARD,
       useClass: PermissionsGuard,
     },
+    {
+      provide: APP_GUARD,
+      useClass: BranchContextGuard,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(BranchContextMiddleware).forRoutes('{*path}');
+  }
+}

@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { isPortalAdmin } from '../auth/portal-access';
 import { PERMISSIONS_KEY } from '../constants/auth.constants';
 import type { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
 
@@ -24,7 +25,7 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Access denied');
     }
 
-    if (user.roles.includes('SUPER_ADMIN')) {
+    if (isPortalAdmin(user.roles)) {
       return true;
     }
 

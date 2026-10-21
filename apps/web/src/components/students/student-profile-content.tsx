@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/input';
+import { FeedbackHistory } from '@/components/instructors/feedback-history';
 import { StudentForm } from '@/components/students/student-form';
 import { toStudentRequest, type StudentFormValues } from '@/lib/schemas/student.schema';
 
@@ -68,8 +69,8 @@ export function StudentProfileContent() {
   }, [canUpdate]);
 
   const tabs = isAdmin
-    ? ['overview', 'enrollments', 'attendance', 'invoices', 'payments', 'certificates', 'comments']
-    : ['overview', 'enrollments', 'attendance'];
+    ? ['overview', 'enrollments', 'attendance', 'feedback', 'invoices', 'payments', 'certificates', 'comments']
+    : ['overview', 'enrollments', 'attendance', 'feedback'];
 
   async function handleUpdate(values: StudentFormValues) {
     await updateStudent(params.id, toStudentRequest(values));
@@ -140,7 +141,19 @@ export function StudentProfileContent() {
           <Info label="Email" value={student.email} />
           <Info label="Date of birth" value={student.dateOfBirth} />
           <Info label="Age" value={student.age === null ? null : String(student.age)} />
-          <Info label="Instructor" value={student.instructorName} />
+          <div className="md:col-span-2">
+            <Info
+              label="Courses and teachers"
+              value={
+                profile.enrollments
+                  .filter((enrollment) => enrollment.status === 'ACTIVE' || enrollment.status === 'PENDING')
+                  .map((enrollment) =>
+                    `${enrollment.courseName} · ${enrollment.groupName}${enrollment.instructorName ? ` · ${enrollment.instructorName}` : ''}`,
+                  )
+                  .join('; ') || student.instructorName || '—'
+              }
+            />
+          </div>
           <Info label="School" value={student.school} />
           <Info label="Address" value={student.address} />
           <Info label="Registration date" value={student.registrationDate} />
@@ -217,7 +230,9 @@ export function StudentProfileContent() {
       {tab === 'enrollments' ? (
         <ListPanel
           empty="No enrollments"
-          items={profile.enrollments.map((e) => `${e.courseName} · ${e.groupName} (${e.status})`)}
+          items={profile.enrollments.map(
+            (e) => `${e.courseName} · ${e.groupName}${e.instructorName ? ` · ${e.instructorName}` : ''} (${e.status})`,
+          )}
         />
       ) : null}
 
@@ -248,6 +263,8 @@ export function StudentProfileContent() {
           items={(profile.certificates ?? []).map((c) => `${c.courseName} · ${c.certificateCode}`)}
         />
       ) : null}
+
+      {tab === 'feedback' ? <FeedbackHistory studentId={student.id} showStudent={false} /> : null}
 
       {tab === 'comments' ? (
         <div className="rounded-xl border p-4 text-sm">{student.notes || 'No comments yet.'}</div>

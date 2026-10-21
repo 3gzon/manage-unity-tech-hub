@@ -16,12 +16,13 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import type { ListStudentsQueryDto } from './dto/student.dto';
 import { StudentAccessService } from './student-access.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 type StudentWithRelations = Prisma.StudentGetPayload<{
   include: {
     parents: { include: { parent: true } };
     enrollments: {
-      include: { group: { include: { course: true } } };
+      include: { group: { include: { course: true; instructor: true } } };
     };
     invoices: true;
   };
@@ -119,8 +120,14 @@ export class StudentsService {
           },
           enrollments: {
             where: { status: 'ACTIVE', deletedAt: null },
-            include: { group: { include: { course: true } } },
-            take: 1,
+            include: {
+              group: {
+                include: {
+                  course: true,
+                  instructor: { select: { firstName: true, lastName: true } },
+                },
+              },
+            },
             orderBy: { startDate: 'desc' },
           },
           invoices: {
@@ -174,7 +181,14 @@ export class StudentsService {
         parents: { include: { parent: true } },
         enrollments: {
           where: { deletedAt: null },
-          include: { group: { include: { course: true } } },
+          include: {
+            group: {
+              include: {
+                course: true,
+                instructor: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
           orderBy: { startDate: 'desc' },
         },
         attendances: {
@@ -204,6 +218,16 @@ export class StudentsService {
       throw new NotFoundException('Student not found');
     }
 
+    const sharedInvoices = await this.prisma.invoice.findMany({
+      where: {
+        deletedAt: null,
+        billedStudents: { some: { studentId: id } },
+        id: { notIn: student.invoices.map((invoice) => invoice.id) },
+      },
+      orderBy: { issueDate: 'desc' },
+    });
+    student.invoices.push(...sharedInvoices);
+
     return this.toProfile(student, user);
   }
 
@@ -215,6 +239,7 @@ export class StudentsService {
     const student = await this.prisma.$transaction(async (tx) => {
       const created = await tx.student.create({
         data: {
+          branchId: currentBranchId()!,
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
@@ -365,7 +390,7 @@ export class StudentsService {
       let familyId = student.familyId;
       if (!familyId) {
         const family = await tx.family.create({
-          data: { name: `${student.lastName} family` },
+          data: { branchId: currentBranchId()!, name: `${student.lastName} family` },
         });
         familyId = family.id;
         await tx.student.update({ where: { id: student.id }, data: { familyId } });
@@ -454,6 +479,7 @@ export class StudentsService {
       if (!parentId) {
         const parent = await tx.parent.create({
           data: {
+            branchId: currentBranchId()!,
             firstName: guardian.firstName.trim(),
             lastName: guardian.lastName.trim(),
             phone: guardian.phone,
@@ -512,11 +538,23 @@ export class StudentsService {
     status: StudentListItem['status'];
     registrationDate: Date;
     parents: Array<{ parent: { firstName: string; lastName: string } }>;
-    enrollments: Array<{ group: { name: string; course: { name: string } } }>;
+    enrollments: Array<{
+      group: {
+        name: string;
+        course: { name: string };
+        instructor: { firstName: string; lastName: string } | null;
+      };
+    }>;
     invoices: Array<{ status: string; remainingAmount: Prisma.Decimal }>;
   }): StudentListItem {
-    const activeEnrollment = student.enrollments[0];
     const guardian = student.parents[0]?.parent;
+    const courses = [...new Set(student.enrollments.map((enrollment) => enrollment.group.course.name))];
+    const groups = student.enrollments.map((enrollment) => {
+      const teacher = enrollment.group.instructor
+        ? `${enrollment.group.instructor.firstName} ${enrollment.group.instructor.lastName}`.trim()
+        : null;
+      return teacher ? `${enrollment.group.name} (${teacher})` : enrollment.group.name;
+    });
 
     return {
       id: student.id,
@@ -528,8 +566,8 @@ export class StudentsService {
       email: student.email,
       status: student.status,
       guardianName: guardian ? `${guardian.firstName} ${guardian.lastName}` : null,
-      activeCourse: activeEnrollment?.group.course.name ?? null,
-      activeGroup: activeEnrollment?.group.name ?? null,
+      activeCourse: courses.length ? courses.join(', ') : null,
+      activeGroup: groups.length ? groups.join(', ') : null,
       paymentStatus: this.resolvePaymentStatus(student.invoices),
       registrationDate: student.registrationDate.toISOString().slice(0, 10),
     };
@@ -637,6 +675,9 @@ export class StudentsService {
       groupName: enrollment.group.name,
       courseId: enrollment.group.courseId,
       courseName: enrollment.group.course.name,
+      instructorName: enrollment.group.instructor
+        ? `${enrollment.group.instructor.firstName} ${enrollment.group.instructor.lastName}`.trim()
+        : null,
       status: enrollment.status,
       startDate: enrollment.startDate.toISOString().slice(0, 10),
       endDate: enrollment.endDate?.toISOString().slice(0, 10) ?? null,

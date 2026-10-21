@@ -53,45 +53,6 @@ function key(resource: string, action: string) {
 
 const ALL_PERMISSION_KEYS = PERMISSIONS.map((p) => key(p.resource, p.action));
 
-const ADMIN_PERMISSIONS = [
-  'students.read',
-  'students.create',
-  'students.update',
-  'students.archive',
-  'parents.read',
-  'parents.manage',
-  'instructors.read',
-  'instructors.manage',
-  'courses.read',
-  'courses.manage',
-  'groups.read',
-  'groups.manage',
-  'enrollments.read',
-  'enrollments.manage',
-  'attendance.read',
-  'attendance.manage',
-  'invoices.read',
-  'invoices.create',
-  'invoices.update',
-  'invoices.cancel',
-  'payments.read',
-  'payments.create',
-  'payments.update',
-  'payments.void',
-  'expenses.read',
-  'expenses.manage',
-  'reports.general',
-  'reports.financial',
-  'certificates.read',
-  'certificates.manage',
-  'compensation.read',
-  'compensation.manage',
-  'audit.read',
-  'users.read',
-  'users.manage',
-  'settings.manage',
-];
-
 const INSTRUCTOR_PERMISSIONS = [
   'groups.read',
   'courses.read',
@@ -109,10 +70,10 @@ const ROLES = [
     permissions: ALL_PERMISSION_KEYS,
   },
   {
-    name: 'ADMIN',
-    displayName: 'Admin',
-    description: 'Operational administration for Unity Tech Hub.',
-    permissions: ADMIN_PERMISSIONS,
+    name: 'BRANCH_ADMIN',
+    displayName: 'Sub Super Admin',
+    description: 'Manages a single branch.',
+    permissions: ALL_PERMISSION_KEYS,
   },
   {
     name: 'INSTRUCTOR',
@@ -189,20 +150,13 @@ async function main() {
     roleName: 'SUPER_ADMIN',
   });
 
-  await upsertStaffUser({
-    email: process.env.SEED_ADMIN_EMAIL ?? 'admin@unitytechhub.com',
-    password: process.env.SEED_ADMIN_PASSWORD ?? 'Admin123!',
-    firstName: 'Ada',
-    lastName: 'Admin',
-    roleName: 'ADMIN',
-  });
-
   const instructorUser = await upsertStaffUser({
     email: process.env.SEED_INSTRUCTOR_EMAIL ?? 'instructor@unitytechhub.com',
     password: process.env.SEED_INSTRUCTOR_PASSWORD ?? 'Instructor123!',
     firstName: 'Ivan',
     lastName: 'Instructor',
     roleName: 'INSTRUCTOR',
+    branchId: 'a1000000-0000-4000-8000-000000000001',
   });
 
   await prisma.instructor.upsert({
@@ -212,12 +166,14 @@ async function main() {
       firstName: instructorUser.firstName,
       lastName: instructorUser.lastName,
       deletedAt: null,
+      branchId: 'a1000000-0000-4000-8000-000000000001',
     },
     create: {
       userId: instructorUser.id,
       firstName: instructorUser.firstName,
       lastName: instructorUser.lastName,
       email: instructorUser.email,
+      branchId: 'a1000000-0000-4000-8000-000000000001',
     },
   });
 
@@ -230,7 +186,8 @@ async function upsertStaffUser(input: {
   password: string;
   firstName: string;
   lastName: string;
-  roleName: 'SUPER_ADMIN' | 'ADMIN' | 'INSTRUCTOR';
+  roleName: 'SUPER_ADMIN' | 'INSTRUCTOR';
+  branchId?: string;
 }) {
   const email = input.email.trim().toLowerCase();
   const role = await prisma.role.findUniqueOrThrow({ where: { name: input.roleName } });
@@ -244,6 +201,7 @@ async function upsertStaffUser(input: {
       passwordHash,
       status: UserStatus.ACTIVE,
       deletedAt: null,
+      branchId: input.branchId ?? null,
     },
     create: {
       email,
@@ -251,6 +209,7 @@ async function upsertStaffUser(input: {
       lastName: input.lastName,
       passwordHash,
       status: UserStatus.ACTIVE,
+      branchId: input.branchId ?? null,
     },
   });
 

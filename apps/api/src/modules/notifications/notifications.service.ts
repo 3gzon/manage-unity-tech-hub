@@ -7,9 +7,10 @@ import type {
 } from '@unity/types';
 import { Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
+import { currentBranchId } from '../../common/branch/branch-context';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
+const ADMIN_ROLES = ['SUPER_ADMIN', 'BRANCH_ADMIN'] as const;
 
 @Injectable()
 export class NotificationsService {
@@ -24,16 +25,23 @@ export class NotificationsService {
     excludeUserId?: string;
   }) {
     try {
+      const branchId = currentBranchId();
       const admins = await this.prisma.user.findMany({
         where: {
           deletedAt: null,
           status: 'ACTIVE',
           ...(input.excludeUserId ? { id: { not: input.excludeUserId } } : {}),
-          roles: {
-            some: {
-              role: { name: { in: [...ADMIN_ROLES] } },
-            },
-          },
+          OR: [
+            { roles: { some: { role: { name: 'SUPER_ADMIN' } } } },
+            ...(branchId
+              ? [
+                  {
+                    branchId,
+                    roles: { some: { role: { name: { in: [...ADMIN_ROLES] } } } },
+                  },
+                ]
+              : []),
+          ],
         },
         select: { id: true },
       });

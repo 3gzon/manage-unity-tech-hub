@@ -10,12 +10,16 @@ import type {
   InstructorListResponse,
   InstructorLookups,
   InstructorOption,
+  InstructorStudent,
 } from '@unity/types';
 import { Prisma, UserStatus } from '@prisma/client';
+import { currentBranchId } from '../../common/branch/branch-context';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import type {
   CreateInstructorDto,
   ListInstructorsQueryDto,
@@ -23,7 +27,7 @@ import type {
 } from './dto/instructor.dto';
 
 const instructorInclude = {
-  user: { select: { id: true, firstName: true, lastName: true, email: true, deletedAt: true } },
+  user: { select: { id: true, firstName: true, lastName: true, email: true, status: true, deletedAt: true } },
   primaryGroups: {
     where: { deletedAt: null },
     select: {
@@ -32,8 +36,23 @@ const instructorInclude = {
       status: true,
       course: { select: { name: true } },
       enrollments: {
-        where: { status: { in: ['ACTIVE', 'PENDING'] }, deletedAt: null },
-        select: { id: true },
+        where: { status: { in: ['ACTIVE', 'PENDING'] }, deletedAt: null, student: { deletedAt: null } },
+        select: {
+          id: true,
+          status: true,
+          student: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              parents: {
+                orderBy: [{ isPrimary: 'desc' as const }],
+                select: { parent: { select: { email: true, deletedAt: true } } },
+              },
+            },
+          },
+        },
       },
     },
     orderBy: { name: 'asc' as const },
@@ -47,6 +66,7 @@ export class InstructorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly auth: AuthService,
   ) {}
 
   async findAll(query: ListInstructorsQueryDto): Promise<InstructorListResponse> {
@@ -92,6 +112,15 @@ export class InstructorsService {
 
   async findOne(id: string): Promise<InstructorDetail> {
     const instructor = await this.requireInstructor(id);
+    return this.toDetail(instructor);
+  }
+
+  async findMine(user: AuthenticatedUser): Promise<InstructorDetail> {
+    const instructor = await this.prisma.instructor.findFirst({
+      where: { userId: user.id, deletedAt: null },
+      include: instructorInclude,
+    });
+    if (!instructor) throw new NotFoundException('Instructor profile not found');
     return this.toDetail(instructor);
   }
 
@@ -146,10 +175,15 @@ export class InstructorsService {
       throw new BadRequestException('Instructor role is not configured');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
+    const branchId = currentBranchId();
+    if (!branchId) {
+      throw new BadRequestException('Choose a branch before adding an instructor');
+    }
 
+    let created: Awaited<ReturnType<InstructorsService['requireInstructor']>> | null = null;
     try {
-      const created = await this.prisma.$transaction(async (tx) => {
+      created = await this.prisma.$transaction(async (tx) => {
         const account = existingUser
           ? await tx.user.update({
               where: { id: existingUser.id },
@@ -158,8 +192,9 @@ export class InstructorsService {
                 lastName,
                 passwordHash,
                 phone,
-                status: UserStatus.ACTIVE,
+                status: UserStatus.PENDING,
                 deletedAt: null,
+                branchId,
               },
             })
           : await tx.user.create({
@@ -169,7 +204,8 @@ export class InstructorsService {
                 lastName,
                 passwordHash,
                 phone,
-                status: UserStatus.ACTIVE,
+                status: UserStatus.PENDING,
+                branchId,
               },
             });
 
@@ -178,6 +214,7 @@ export class InstructorsService {
 
         return tx.instructor.create({
           data: {
+            branchId: currentBranchId()!,
             firstName,
             lastName,
             email,
@@ -198,11 +235,44 @@ export class InstructorsService {
         newValue: this.auditSnapshot(created),
       });
 
+      try {
+        if (!created.userId) throw new BadRequestException('Instructor account was not created');
+        await this.auth.sendConfirmation(created.userId);
+      } catch (error) {
+        await this.removeUnconfirmed(created.id, created.userId, existingUser);
+        throw error;
+      }
+
       return this.toDetail(created);
     } catch (error) {
       this.rethrowUniqueConflict(error);
       throw error;
     }
+  }
+
+  private async removeUnconfirmed(
+    instructorId: string,
+    userId: string | null,
+    previousUser: { id: string; status: UserStatus; deletedAt: Date | null; passwordHash: string } | null,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.instructor.delete({ where: { id: instructorId } });
+      if (!userId) return;
+      await tx.accountToken.deleteMany({ where: { userId } });
+      await tx.userRole.deleteMany({ where: { userId } });
+      if (!previousUser) {
+        await tx.user.delete({ where: { id: userId } });
+        return;
+      }
+      await tx.user.update({
+        where: { id: previousUser.id },
+        data: {
+          status: previousUser.status,
+          deletedAt: previousUser.deletedAt,
+          passwordHash: previousUser.passwordHash,
+        },
+      });
+    });
   }
 
   async update(user: AuthenticatedUser, id: string, dto: UpdateInstructorDto): Promise<InstructorDetail> {
@@ -339,6 +409,7 @@ export class InstructorsService {
       userId: user?.id ?? null,
       userName: user ? `${user.firstName} ${user.lastName}`.trim() : null,
       userEmail: user?.email ?? null,
+      accountStatus: user?.status ?? null,
       activeGroupsCount: instructor.primaryGroups.length,
       createdAt: instructor.createdAt.toISOString(),
       updatedAt: instructor.updatedAt.toISOString(),
@@ -355,6 +426,25 @@ export class InstructorsService {
         status: group.status,
         enrolledCount: group.enrollments.length,
       })),
+      students: instructor.primaryGroups
+        .flatMap((group) => group.enrollments.map((enrollment) => this.toStudent(group, enrollment)))
+        .sort((a, b) => a.studentName.localeCompare(b.studentName) || a.groupName.localeCompare(b.groupName)),
+    };
+  }
+
+  private toStudent(
+    group: InstructorRecord['primaryGroups'][number],
+    enrollment: InstructorRecord['primaryGroups'][number]['enrollments'][number],
+  ): InstructorStudent {
+    return {
+      enrollmentId: enrollment.id,
+      studentId: enrollment.student.id,
+      studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`.trim(),
+      email: contactEmail(enrollment.student),
+      groupId: group.id,
+      groupName: group.name,
+      courseName: group.course.name,
+      status: enrollment.status === 'PENDING' ? 'PENDING' : 'ACTIVE',
     };
   }
 
@@ -373,4 +463,18 @@ export class InstructorsService {
       throw new ConflictException('An instructor with this email already exists');
     }
   }
+}
+
+function contactEmail(student: {
+  email: string | null;
+  parents: Array<{ parent: { email: string | null; deletedAt: Date | null } }>;
+}) {
+  const own = student.email?.trim();
+  if (own) return own;
+  for (const link of student.parents) {
+    if (link.parent.deletedAt) continue;
+    const email = link.parent.email?.trim();
+    if (email) return email;
+  }
+  return null;
 }

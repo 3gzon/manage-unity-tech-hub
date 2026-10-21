@@ -1,5 +1,6 @@
 import type { ApiErrorResponse, AuthTokensResponse } from '@unity/types';
 import { refreshRequest } from './auth/auth-api';
+import { getStoredBranchId } from './auth/branch-storage';
 import { clearAccessToken, getAccessToken, setAccessToken } from './auth/token-storage';
 
 const DEFAULT_API_URL = 'http://localhost:3001/api';
@@ -87,6 +88,10 @@ export async function apiClient<T>(path: string, options: ApiClientOptions = {})
     if (token) {
       authHeaders.Authorization = `Bearer ${token}`;
     }
+    const branchId = getStoredBranchId();
+    if (branchId) {
+      authHeaders['X-Branch-Id'] = branchId;
+    }
   }
 
   const execute = () =>
@@ -111,6 +116,7 @@ export async function apiClient<T>(path: string, options: ApiClientOptions = {})
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${newToken}`,
+          ...(getStoredBranchId() ? { 'X-Branch-Id': getStoredBranchId() as string } : {}),
           ...headers,
         },
         body: body === undefined ? undefined : JSON.stringify(body),

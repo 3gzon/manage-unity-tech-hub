@@ -13,7 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { fetchFinancialReport } from '@/lib/reports-api';
-import { hasPermission, hasRole } from '@/lib/auth/authorization';
+import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +35,7 @@ function money(value: string) {
 
 export function FinancialReportsPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN') && hasPermission(user, 'reports.financial');
+  const allowed = isAdminPortalUser(user) && hasPermission(user, 'reports.financial');
 
   const [preset, setPreset] = useState<FinancialReportPreset>('THIS_MONTH');
   const [fromDate, setFromDate] = useState('');

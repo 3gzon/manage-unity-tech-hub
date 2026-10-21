@@ -43,6 +43,10 @@ export function updateUser(id: string, data: UpdateManagedUserRequest) {
   return api.patch<ManagedUser>(`users/${id}`, data);
 }
 
+export function deleteUser(id: string) {
+  return api.delete<void>(`users/${id}`);
+}
+
 export function disableUser(id: string) {
   return api.post<ManagedUser>(`users/${id}/disable`);
 }

@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuditModule } from '../../infrastructure/audit/audit.module';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { toJwtDuration } from './auth.types';
@@ -25,7 +26,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     AuditModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, MailService],
   exports: [AuthService],
 })
 export class AuthModule {}

@@ -6,7 +6,7 @@ import { Plus } from 'lucide-react';
 import type { InvoiceListItem, InvoiceListQuery } from '@unity/types';
 import { archiveInvoice, createInvoice, fetchInvoices, sendInvoiceEmail } from '@/lib/invoices-api';
 import { fetchStudent, fetchStudents } from '@/lib/students-api';
-import { hasRole } from '@/lib/auth/authorization';
+import { isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,12 +36,16 @@ function emptyInvoice() {
     price: '',
     email: '',
     kind: 'paid' as 'paid' | 'due',
+    familyMembers: [] as Array<{ id: string; name: string }>,
+    selectedFamilyIds: [] as string[],
+    familyPrices: {} as Record<string, string>,
+    combined: false,
   };
 }
 
 export function InvoicesPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN');
+  const allowed = isAdminPortalUser(user);
 
   const [query, setQuery] = useState<InvoiceListQuery>({ page: 1, pageSize: 20 });
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
@@ -91,9 +95,15 @@ export function InvoicesPageContent() {
   }, [createOpen, studentQuery]);
 
   const previewTotal = useMemo(() => {
-    const price = Number(createState.price || 0);
+    const selected = createState.familyMembers.filter((member) => createState.selectedFamilyIds.includes(member.id));
+    if (createState.combined && selected.length) {
+      const price = Number(createState.price || 0);
+      return price > 0 ? price.toFixed(2) : '0.00';
+    }
+    const extra = selected.reduce((sum, member) => sum + Number(createState.familyPrices[member.id] || 0), 0);
+    const price = Number(createState.price || 0) + extra;
     return price > 0 ? price.toFixed(2) : '0.00';
-  }, [createState.price]);
+  }, [createState]);
 
   async function selectStudent(student: { id: string; name: string; email: string | null }) {
     setCreateState((prev) => ({
@@ -101,14 +111,22 @@ export function InvoicesPageContent() {
       studentId: student.id,
       studentName: student.name,
       email: student.email ?? '',
+      familyMembers: [],
+      selectedFamilyIds: [],
+      familyPrices: {},
+      combined: false,
     }));
-    if (student.email) return;
     setFillingEmail(true);
     try {
       const profile = await fetchStudent(student.id);
       const guardianEmail = profile.guardians.find((guardian) => guardian.email)?.email ?? '';
-      const email = profile.student.email ?? guardianEmail;
-      setCreateState((prev) => (prev.studentId === student.id ? { ...prev, email } : prev));
+      const email = student.email ?? profile.student.email ?? guardianEmail;
+      const familyMembers = (profile.family?.members ?? [])
+        .filter((member) => member.id !== student.id)
+        .map((member) => ({ id: member.id, name: member.fullName }));
+      setCreateState((prev) =>
+        prev.studentId === student.id ? { ...prev, email, familyMembers } : prev,
+      );
     } catch {
       // The address can still be typed in.
     } finally {
@@ -120,19 +138,40 @@ export function InvoicesPageContent() {
     setCreateError(null);
     try {
       const paid = createState.kind === 'paid';
+      const selected = createState.familyMembers.filter((member) =>
+        createState.selectedFamilyIds.includes(member.id),
+      );
+      const combined = createState.combined && selected.length > 0;
+      const names = [createState.studentName, ...selected.map((member) => member.name)].filter(Boolean);
+      const items = combined
+        ? [
+            {
+              description: `Combined price for ${names.join(', ')}`,
+              quantity: 1,
+              unitPrice: Number(createState.price),
+            },
+          ]
+        : [
+            {
+              description: createState.description,
+              quantity: 1,
+              unitPrice: Number(createState.price),
+            },
+            ...selected.map((member) => ({
+              description: `${createState.description} · ${member.name}`,
+              quantity: 1,
+              unitPrice: Number(createState.familyPrices[member.id]),
+            })),
+          ];
       const invoice = await createInvoice({
         studentId: createState.studentId,
+        ...(selected.length ? { studentIds: selected.map((member) => member.id) } : {}),
+        ...(combined ? { combinedPrice: Number(createState.price) } : {}),
         issueDate: createState.date,
         dueDate: createState.date,
         billingPeriod: displayDate(createState.date),
         ...(paid ? { status: 'PAID' as const } : {}),
-        items: [
-          {
-            description: createState.description,
-            quantity: 1,
-            unitPrice: Number(createState.price),
-          },
-        ],
+        items,
       });
       const email = createState.email.trim();
       if (email) {
@@ -330,7 +369,16 @@ export function InvoicesPageContent() {
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    setCreateState((prev) => ({ ...prev, studentId: '', studentName: '', email: '' }))
+                    setCreateState((prev) => ({
+                      ...prev,
+                      studentId: '',
+                      studentName: '',
+                      email: '',
+                      familyMembers: [],
+                      selectedFamilyIds: [],
+                      familyPrices: {},
+                      combined: false,
+                    }))
                   }
                 >
                   Change
@@ -375,6 +423,62 @@ export function InvoicesPageContent() {
               onChange={(e) => setCreateState((prev) => ({ ...prev, date: e.target.value }))}
             />
           </div>
+          {createState.familyMembers.length ? (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Family on this invoice</p>
+              <p className="text-xs text-muted-foreground">
+                Add another family member to the same invoice, with their own price or one combined price.
+              </p>
+              {createState.familyMembers.map((member) => {
+                const selected = createState.selectedFamilyIds.includes(member.id);
+                return (
+                  <div key={member.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex flex-1 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(event) =>
+                          setCreateState((prev) => ({
+                            ...prev,
+                            selectedFamilyIds: event.target.checked
+                              ? [...prev.selectedFamilyIds, member.id]
+                              : prev.selectedFamilyIds.filter((id) => id !== member.id),
+                          }))
+                        }
+                      />
+                      {member.name}
+                    </label>
+                    {selected && !createState.combined ? (
+                      <Input
+                        className="sm:max-w-[140px]"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Price"
+                        value={createState.familyPrices[member.id] ?? ''}
+                        onChange={(event) =>
+                          setCreateState((prev) => ({
+                            ...prev,
+                            familyPrices: { ...prev.familyPrices, [member.id]: event.target.value },
+                          }))
+                        }
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+              {createState.selectedFamilyIds.length ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={createState.combined}
+                    onChange={(event) => setCreateState((prev) => ({ ...prev, combined: event.target.checked }))}
+                  />
+                  One combined price for everyone selected
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           <Input
             placeholder="Description"
             value={createState.description}
@@ -405,7 +509,7 @@ export function InvoicesPageContent() {
             type="number"
             min="0"
             step="0.01"
-            placeholder="Price"
+            placeholder={createState.combined ? 'Combined price' : 'Price'}
             value={createState.price}
             onChange={(e) => setCreateState((prev) => ({ ...prev, price: e.target.value }))}
           />
@@ -418,7 +522,15 @@ export function InvoicesPageContent() {
           </Button>
           <Button
             onClick={() => void handleCreate()}
-            disabled={!createState.studentId || !createState.date || !createState.description.trim() || !createState.price}
+            disabled={
+              !createState.studentId ||
+              !createState.date ||
+              !createState.price ||
+              (!createState.combined && !createState.description.trim()) ||
+              createState.selectedFamilyIds.some(
+                (id) => !createState.combined && (createState.familyPrices[id] ?? '') === '',
+              )
+            }
           >
             {createState.email.trim()
               ? createState.kind === 'paid'

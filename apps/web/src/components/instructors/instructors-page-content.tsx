@@ -11,7 +11,7 @@ import {
   updateInstructor,
 } from '@/lib/instructors-api';
 import { useAuth } from '@/lib/auth/auth-context';
-import { hasPermission, hasRole } from '@/lib/auth/authorization';
+import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -19,19 +19,25 @@ import { EmptyState, ErrorState } from '@/components/dashboard/dashboard-states'
 import { Input, Label } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
+function accountLabel(status: InstructorListItem['accountStatus']) {
+  if (status === 'PENDING') return 'Waiting to confirm';
+  if (status === 'DISABLED') return 'Disabled';
+  if (status === 'ACTIVE') return 'Confirmed';
+  return 'No account';
+}
+
 function emptyForm() {
   return {
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
-    password: '',
   };
 }
 
 export function InstructorsPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN') && hasPermission(user, 'instructors.read');
+  const allowed = isAdminPortalUser(user) && hasPermission(user, 'instructors.read');
   const canManage = hasPermission(user, 'instructors.manage');
 
   const [query, setQuery] = useState<InstructorListQuery>({ page: 1, pageSize: 20 });
@@ -45,6 +51,7 @@ export function InstructorsPageContent() {
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<InstructorListItem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +86,6 @@ export function InstructorsPageContent() {
       lastName: instructor.lastName,
       email: instructor.email,
       phone: instructor.phone ?? '',
-      password: '',
     });
     setFormError(null);
     setFormOpen(true);
@@ -97,8 +103,10 @@ export function InstructorsPageContent() {
     try {
       if (editing) {
         await updateInstructor(editing.id, payload);
+        setNotice(null);
       } else {
-        await createInstructor({ ...payload, password: form.password });
+        await createInstructor(payload);
+        setNotice(`Confirmation email sent to ${payload.email}. They choose a password from that email.`);
       }
       setFormOpen(false);
       setEditing(null);
@@ -135,7 +143,7 @@ export function InstructorsPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Instructors</h1>
           <p className="text-sm text-muted-foreground">
-            Add a name, email, phone, and password. They sign in with that email.
+            Add a name, email, and phone. A confirmation email goes to that address, and they choose a password there.
           </p>
         </div>
         {canManage ? (
@@ -145,6 +153,8 @@ export function InstructorsPageContent() {
           </Button>
         ) : null}
       </div>
+
+      {notice ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">{notice}</p> : null}
 
       <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-2">
         <Input
@@ -170,6 +180,7 @@ export function InstructorsPageContent() {
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3 font-medium">Account</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">Active Groups</th>
                 <th className="px-4 py-3 font-medium">Hire Date</th>
@@ -185,6 +196,9 @@ export function InstructorsPageContent() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">{instructor.email}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant="outline">{accountLabel(instructor.accountStatus)}</Badge>
+                  </td>
                   <td className="px-4 py-3">{instructor.phone ?? '—'}</td>
                   <td className="px-4 py-3">
                     <Badge variant="outline">{instructor.activeGroupsCount}</Badge>
@@ -246,7 +260,7 @@ export function InstructorsPageContent() {
           <DialogDescription>
             {editing
               ? 'Name, email, and phone are enough.'
-              : 'This also creates their sign-in. Password must be at least 8 characters.'}
+              : 'We email this address a link to confirm the account and choose a password.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 md:grid-cols-2">
@@ -276,16 +290,6 @@ export function InstructorsPageContent() {
             <Label>Phone</Label>
             <Input value={form.phone} onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))} />
           </div>
-          {!editing ? (
-            <div className="space-y-1">
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-              />
-            </div>
-          ) : null}
           {formError ? <p className="text-sm text-red-600 md:col-span-2">{formError}</p> : null}
         </div>
         <DialogFooter>
@@ -294,12 +298,7 @@ export function InstructorsPageContent() {
           </Button>
           <Button
             onClick={() => void handleSave()}
-            disabled={
-              !form.firstName.trim() ||
-              !form.lastName.trim() ||
-              !form.email.trim() ||
-              (!editing && form.password.length < 8)
-            }
+            disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()}
           >
             {editing ? 'Save changes' : 'Create instructor'}
           </Button>

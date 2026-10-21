@@ -20,7 +20,7 @@ import { CreateContractDto, ListContractsQueryDto, UpdateContractDto } from './d
 import { ContractsService } from './contracts.service';
 
 @Controller('contracts')
-@Roles('SUPER_ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}
 

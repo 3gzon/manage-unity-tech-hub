@@ -12,7 +12,7 @@ import type {
 } from '@unity/types';
 import { createContract, downloadContractPdf, fetchContract, updateContract } from '@/lib/contracts-api';
 import { fetchUsers } from '@/lib/users-api';
-import { isSuperAdmin } from '@/lib/auth/authorization';
+import { isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ export function ContractFormContent({ mode }: { mode: 'create' | 'edit' }) {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const allowed = isSuperAdmin(user);
+  const allowed = isAdminPortalUser(user);
 
   const [employees, setEmployees] = useState<ManagedUser[]>([]);
   const [form, setForm] = useState(emptyForm());
@@ -122,7 +122,7 @@ export function ContractFormContent({ mode }: { mode: 'create' | 'edit' }) {
   useEffect(() => {
     void fetchUsers({ page: 1, pageSize: 100 })
       .then((res) =>
-        setEmployees(res.data.filter((item) => item.role === 'ADMIN' || item.role === 'INSTRUCTOR')),
+        setEmployees(res.data.filter((item) => item.role === 'INSTRUCTOR' || item.role === 'SUPER_ADMIN' || item.role === 'BRANCH_ADMIN')),
       )
       .catch(() => setEmployees([]));
   }, []);

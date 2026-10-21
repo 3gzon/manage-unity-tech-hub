@@ -11,7 +11,7 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('admin')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
   @Permissions('reports.general')
   getAdminDashboard(@CurrentUser() user: AuthenticatedUser): Promise<AdminDashboardResponse> {
     return this.dashboardService.getAdminDashboard(user);

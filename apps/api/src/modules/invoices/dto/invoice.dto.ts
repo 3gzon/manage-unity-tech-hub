@@ -80,6 +80,17 @@ export class CreateInvoiceDto {
   @IsUUID()
   studentId!: string;
 
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  studentIds?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  combinedPrice?: number;
+
   @IsDateString()
   issueDate!: string;
 

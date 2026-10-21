@@ -13,7 +13,7 @@ import { ChevronDown, LogOut } from 'lucide-react';
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Admin',
+  BRANCH_ADMIN: 'Sub Super Admin',
   INSTRUCTOR: 'Instructor',
 };
 

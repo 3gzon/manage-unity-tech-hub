@@ -5,8 +5,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-us
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import type { UpdateSettingsDto } from './dto/settings.dto';
-
-export const SYSTEM_SETTINGS_ID = '00000000-0000-4000-8000-000000000001';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const DEFAULTS = {
   schoolName: 'Unity Tech Hub',
@@ -24,10 +23,10 @@ export class SettingsService {
   ) {}
 
   async get() {
-    const existing = await this.prisma.systemSettings.findUnique({ where: { id: SYSTEM_SETTINGS_ID } });
+    const existing = await this.prisma.systemSettings.findFirst();
     if (existing) return existing;
     return this.prisma.systemSettings.create({
-      data: { id: SYSTEM_SETTINGS_ID, ...DEFAULTS },
+      data: { ...DEFAULTS, branchId: currentBranchId()! },
     });
   }
 
@@ -38,7 +37,7 @@ export class SettingsService {
   async update(user: AuthenticatedUser, dto: UpdateSettingsDto): Promise<SystemSettings> {
     const current = await this.get();
     const updated = await this.prisma.systemSettings.update({
-      where: { id: SYSTEM_SETTINGS_ID },
+      where: { id: current.id },
       data: {
         schoolName: dto.schoolName.trim(),
         currency: dto.currency.trim().toUpperCase(),
@@ -55,7 +54,7 @@ export class SettingsService {
       userId: user.id,
       action: 'SETTINGS_UPDATED',
       entity: 'SystemSettings',
-      entityId: SYSTEM_SETTINGS_ID,
+      entityId: current.id,
       oldValue: {
         schoolName: current.schoolName,
         currency: current.currency,

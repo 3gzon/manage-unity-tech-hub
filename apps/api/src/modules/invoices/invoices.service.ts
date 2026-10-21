@@ -20,6 +20,7 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { TuitionQuoteService } from '../payments/tuition-quote.service';
 import { SettingsService } from '../settings/settings.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 import type {
   CreateInvoiceDto,
   GenerateMonthlyInvoicesDto,
@@ -82,36 +83,42 @@ export class InvoicesService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const where: Prisma.InvoiceWhereInput = {
-      deletedAt: null,
-      ...(query.studentId ? { studentId: query.studentId } : {}),
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.dueFrom || query.dueTo
-        ? {
-            dueDate: {
-              ...(query.dueFrom ? { gte: new Date(query.dueFrom) } : {}),
-              ...(query.dueTo ? { lte: new Date(query.dueTo) } : {}),
-            },
-          }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { invoiceNumber: { contains: query.search, mode: 'insensitive' } },
-              { billingPeriod: { contains: query.search, mode: 'insensitive' } },
-              {
-                student: {
-                  OR: [
-                    { firstName: { contains: query.search, mode: 'insensitive' } },
-                    { lastName: { contains: query.search, mode: 'insensitive' } },
-                  ],
-                },
-              },
-              { payments: { some: { fiscalCoupon: { contains: query.search, mode: 'insensitive' } } } },
-            ],
-          }
-        : {}),
-    };
+    const filters: Prisma.InvoiceWhereInput[] = [{ deletedAt: null }];
+    if (query.status) filters.push({ status: query.status });
+    if (query.studentId) {
+      filters.push({
+        OR: [
+          { studentId: query.studentId },
+          { billedStudents: { some: { studentId: query.studentId } } },
+        ],
+      });
+    }
+    if (query.dueFrom || query.dueTo) {
+      filters.push({
+        dueDate: {
+          ...(query.dueFrom ? { gte: new Date(query.dueFrom) } : {}),
+          ...(query.dueTo ? { lte: new Date(query.dueTo) } : {}),
+        },
+      });
+    }
+    if (query.search) {
+      const name = {
+        OR: [
+          { firstName: { contains: query.search, mode: 'insensitive' as const } },
+          { lastName: { contains: query.search, mode: 'insensitive' as const } },
+        ],
+      };
+      filters.push({
+        OR: [
+          { invoiceNumber: { contains: query.search, mode: 'insensitive' } },
+          { billingPeriod: { contains: query.search, mode: 'insensitive' } },
+          { student: name },
+          { billedStudents: { some: { student: name } } },
+          { payments: { some: { fiscalCoupon: { contains: query.search, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+    const where: Prisma.InvoiceWhereInput = { AND: filters };
 
     const orderBy: Prisma.InvoiceOrderByWithRelationInput = {
       [query.sortBy ?? 'issueDate']: query.sortOrder ?? 'desc',
@@ -126,6 +133,7 @@ export class InvoicesService {
         take: pageSize,
         include: {
           student: { select: { id: true, firstName: true, lastName: true } },
+          billedStudents: { include: { student: { select: { firstName: true, lastName: true } } } },
         },
       }),
     ]);
@@ -146,6 +154,7 @@ export class InvoicesService {
       where: { id, deletedAt: null },
       include: {
         student: true,
+        billedStudents: { include: { student: { select: { firstName: true, lastName: true } } } },
         items: true,
         payments: {
           where: { deletedAt: null },
@@ -160,16 +169,20 @@ export class InvoicesService {
   }
 
   async create(user: AuthenticatedUser, dto: CreateInvoiceDto): Promise<InvoiceDetail> {
+    const billed = await this.resolveBilledStudents(dto);
+    if (dto.combinedPrice !== undefined && billed.length > 1) {
+      const names = billed.map((student) => `${student.firstName} ${student.lastName}`.trim()).join(', ');
+      dto.items = [
+        {
+          description: `Combined price for ${names}`,
+          quantity: 1,
+          unitPrice: dto.combinedPrice,
+        },
+      ];
+      dto.discount = 0;
+    }
     if (!dto.items.length) {
       throw new BadRequestException('Invoice must contain at least one item');
-    }
-
-    const student = await this.prisma.student.findFirst({
-      where: { id: dto.studentId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!student) {
-      throw new NotFoundException('Student not found');
     }
 
     this.assertDateOrder(new Date(dto.issueDate), new Date(dto.dueDate));
@@ -590,6 +603,7 @@ export class InvoicesService {
         return await this.prisma.$transaction(async (tx) => {
           const invoice = await tx.invoice.create({
             data: {
+              branchId: currentBranchId()!,
               invoiceNumber,
               studentId: dto.studentId,
               issueDate,
@@ -615,11 +629,17 @@ export class InvoicesService {
                   amount: new Prisma.Decimal(item.quantity).mul(item.unitPrice),
                 })),
               },
+              billedStudents: {
+                create: [...new Set([dto.studentId, ...(dto.studentIds ?? [])])].map((studentId) => ({
+                  studentId,
+                })),
+              },
             },
           });
           if (recordsPayment) {
             await tx.payment.create({
               data: {
+                branchId: currentBranchId()!,
                 studentId: dto.studentId,
                 invoiceId: invoice.id,
                 recordedById: user.id,
@@ -714,6 +734,45 @@ export class InvoicesService {
     return due < today ? 'OVERDUE' : 'UNPAID';
   }
 
+  private async resolveBilledStudents(dto: CreateInvoiceDto) {
+    const ids = [dto.studentId, ...(dto.studentIds ?? []).filter((id) => id !== dto.studentId)];
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        familyId: true,
+        parents: { select: { parentId: true } },
+      },
+    });
+    if (students.length !== ids.length) {
+      throw new NotFoundException('Student not found');
+    }
+    if (ids.length === 1) return students;
+
+    const ordered = ids.map((id) => students.find((student) => student.id === id)!);
+    const familyIds = new Set(ordered.map((student) => student.familyId).filter(Boolean));
+    const sameFamily = familyIds.size === 1 && ordered.every((student) => student.familyId);
+    const parentSets = ordered.map((student) => new Set(student.parents.map((link) => link.parentId)));
+    const sharedParent = [...parentSets[0]!].some((parentId) => parentSets.every((set) => set.has(parentId)));
+    if (!sameFamily && !sharedParent) {
+      throw new BadRequestException('Add these students to the same family pack before billing them together');
+    }
+    return ordered;
+  }
+
+  private billedLabel(
+    primary: { firstName: string; lastName: string },
+    billed?: Array<{ student: { firstName: string; lastName: string } }>,
+  ) {
+    const primaryName = `${primary.firstName} ${primary.lastName}`.trim();
+    const others = (billed ?? [])
+      .map((link) => `${link.student.firstName} ${link.student.lastName}`.trim())
+      .filter((name) => name && name !== primaryName);
+    return [primaryName, ...others].join(' & ');
+  }
+
   private assertMonth(month: string) {
     const [yearPart, monthPart] = month.split('-');
     if (!yearPart || !monthPart || yearPart.length !== 4 || monthPart.length !== 2) {
@@ -745,12 +804,13 @@ export class InvoicesService {
     remainingAmount: Prisma.Decimal;
     status: InvoiceStatus;
     student: { firstName: string; lastName: string };
+    billedStudents?: Array<{ student: { firstName: string; lastName: string } }>;
   }): InvoiceListItem {
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       studentId: invoice.studentId,
-      studentName: `${invoice.student.firstName} ${invoice.student.lastName}`,
+      studentName: this.billedLabel(invoice.student, invoice.billedStudents),
       billingPeriod: invoice.billingPeriod,
       issueDate: invoice.issueDate.toISOString().slice(0, 10),
       dueDate: invoice.dueDate.toISOString().slice(0, 10),
@@ -778,6 +838,7 @@ export class InvoicesService {
     createdAt: Date;
     updatedAt: Date;
     student: { firstName: string; lastName: string; email: string | null };
+    billedStudents?: Array<{ student: { firstName: string; lastName: string } }>;
     items: Array<{
       id: string;
       description: string;
@@ -799,7 +860,7 @@ export class InvoicesService {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       studentId: invoice.studentId,
-      studentName: `${invoice.student.firstName} ${invoice.student.lastName}`,
+      studentName: this.billedLabel(invoice.student, invoice.billedStudents),
       studentEmail: invoice.student.email,
       issueDate: invoice.issueDate.toISOString().slice(0, 10),
       dueDate: invoice.dueDate.toISOString().slice(0, 10),

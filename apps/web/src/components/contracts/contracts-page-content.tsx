@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { EmploymentContractListItem, EmploymentContractListQuery } from '@unity/types';
 import { archiveContract, downloadContractPdf, fetchContracts } from '@/lib/contracts-api';
-import { isSuperAdmin } from '@/lib/auth/authorization';
+import { isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function ContractsPageContent() {
   const { user } = useAuth();
-  const allowed = isSuperAdmin(user);
+  const allowed = isAdminPortalUser(user);
   const [query, setQuery] = useState<EmploymentContractListQuery>({ page: 1, pageSize: 20 });
   const [items, setItems] = useState<EmploymentContractListItem[]>([]);
   const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });

@@ -224,8 +224,8 @@ export function StudentsPageContent() {
                 <th className="px-4 py-3 font-medium">Age</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">Guardian</th>
-                <th className="px-4 py-3 font-medium">Active Course</th>
-                <th className="px-4 py-3 font-medium">Group</th>
+                <th className="px-4 py-3 font-medium">Courses</th>
+                <th className="px-4 py-3 font-medium">Groups</th>
                 <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Registration date</th>

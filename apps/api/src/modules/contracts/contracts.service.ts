@@ -12,6 +12,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-us
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import type { CreateContractDto, ListContractsQueryDto, UpdateContractDto } from './dto/contract.dto';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const MAX_FIXED_TERM_YEARS = 10;
 const MAX_SPECIFIC_TASK_DAYS = 120;
@@ -83,6 +84,7 @@ export class ContractsService {
 
     const created = await this.prisma.employmentContract.create({
       data: {
+        branchId: currentBranchId()!,
         contractNumber: await this.nextContractNumber(),
         createdById: user.id,
         employeeUserId: dto.employeeUserId,
@@ -522,15 +524,20 @@ export class ContractsService {
       include: { roles: { include: { role: true } } },
     });
     if (!employee) throw new NotFoundException('Employee user not found');
+    const branchId = currentBranchId();
     const roleNames = employee.roles.map((item) => item.role.name);
+    const isCentral = roleNames.includes('SUPER_ADMIN');
+    if (branchId && !isCentral && employee.branchId !== branchId) {
+      throw new NotFoundException('Employee user not found');
+    }
     if (type === 'COLLABORATION') {
       if (!roleNames.includes('INSTRUCTOR')) {
         throw new BadRequestException('Collaboration agreements can be created only for instructors');
       }
       return;
     }
-    if (!roleNames.includes('ADMIN') && !roleNames.includes('INSTRUCTOR')) {
-      throw new BadRequestException('Contracts can be created only for admin or instructor employees');
+    if (!roleNames.includes('SUPER_ADMIN') && !roleNames.includes('BRANCH_ADMIN') && !roleNames.includes('INSTRUCTOR')) {
+      throw new BadRequestException('Contracts can be created only for staff at this branch');
     }
   }
 

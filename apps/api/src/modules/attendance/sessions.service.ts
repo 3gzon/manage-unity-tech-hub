@@ -21,6 +21,7 @@ import type {
 } from './dto/attendance.dto';
 import { SessionGeneratorService } from './session-generator.service';
 import { toApiSessionStatus } from './session.util';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -127,6 +128,7 @@ export class SessionsService {
 
     const session = await this.prisma.classSession.create({
       data: {
+        branchId: currentBranchId()!,
         groupId,
         sessionDate,
         startTime: dto.startTime,

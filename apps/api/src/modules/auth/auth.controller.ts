@@ -17,6 +17,7 @@ import { REFRESH_TOKEN_COOKIE } from '../../common/constants/auth.constants';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuthService } from './auth.service';
 import type { AuthTokensWithRefresh } from './auth.types';
+import { ForgotPasswordDto, SetPasswordDto } from './dto/account.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
@@ -62,6 +63,27 @@ export class AuthController {
     const refreshToken = dto.refreshToken ?? req.cookies?.[REFRESH_TOKEN_COOKIE];
     await this.authService.logout(refreshToken, user.id, this.getIp(req));
     res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/auth' });
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('confirm-account')
+  confirmAccount(@Body() dto: SetPasswordDto) {
+    return this.authService.confirmAccount(dto.token, dto.password);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('reset-password')
+  resetPassword(@Body() dto: SetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 
   @Get('me')

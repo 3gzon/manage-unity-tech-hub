@@ -21,6 +21,7 @@ const PROTECTED_PREFIXES = [
   '/settings',
   '/my-groups',
   '/my-schedule',
+  '/materials',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -66,5 +67,7 @@ export const config = {
     '/settings',
     '/my-groups',
     '/my-schedule',
+    '/materials',
+    '/materials/:path*',
   ],
 };

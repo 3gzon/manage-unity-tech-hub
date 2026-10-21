@@ -8,17 +8,20 @@ import {
   ClipboardList,
   FileSignature,
   FileText,
+  MessagesSquare,
   GraduationCap,
   LayoutDashboard,
+  Library,
   Receipt,
   Settings,
   Shield,
   UserCog,
+  UserRound,
   Users,
   Wallet,
 } from 'lucide-react';
 import type { AuthUser } from '@unity/types';
-import { hasAnyPermission, hasPermission, hasRole, isSuperAdmin } from '@/lib/auth/authorization';
+import { hasAnyPermission, hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 
 export interface NavItem {
   title: string;
@@ -66,6 +69,11 @@ const adminSections: NavSection[] = [
         visible: (user) => hasPermission(user, 'courses.read'),
       },
       {
+        title: 'Materials',
+        href: '/materials',
+        icon: Library,
+      },
+      {
         title: 'Groups',
         href: '/groups',
         icon: Users,
@@ -76,6 +84,12 @@ const adminSections: NavSection[] = [
         href: '/enrollments',
         icon: ClipboardList,
         visible: (user) => hasPermission(user, 'enrollments.read'),
+      },
+      {
+        title: 'Feedback',
+        href: '/feedback',
+        icon: MessagesSquare,
+        visible: (user) => isAdminPortalUser(user),
       },
       {
         title: "Today's Classes",
@@ -137,7 +151,7 @@ const adminSections: NavSection[] = [
         title: 'Contracts',
         href: '/contracts',
         icon: FileSignature,
-        visible: (user) => isSuperAdmin(user),
+        visible: (user) => isAdminPortalUser(user),
       },
       {
         title: 'Settings',
@@ -155,6 +169,11 @@ const instructorSections: NavSection[] = [
   },
   {
     items: [
+      {
+        title: 'My profile',
+        href: '/my-profile',
+        icon: UserRound,
+      },
       {
         title: 'My Groups',
         href: '/my-groups',
@@ -179,6 +198,16 @@ const instructorSections: NavSection[] = [
         icon: GraduationCap,
         visible: (user) => hasPermission(user, 'students.read'),
       },
+      {
+        title: 'Materials',
+        href: '/materials',
+        icon: Library,
+      },
+      {
+        title: 'Feedback',
+        href: '/feedback',
+        icon: MessagesSquare,
+      },
     ],
   },
 ];
@@ -188,7 +217,7 @@ export function getNavigationSections(user: AuthUser | null): NavSection[] {
     return [];
   }
 
-  const isAdminUser = hasRole(user, 'SUPER_ADMIN', 'ADMIN');
+  const isAdminUser = isAdminPortalUser(user);
   const sections = isAdminUser ? adminSections : instructorSections;
 
   return sections
@@ -199,6 +228,4 @@ export function getNavigationSections(user: AuthUser | null): NavSection[] {
     .filter((section) => section.items.length > 0);
 }
 
-export function isAdminPortalUser(user: AuthUser | null): boolean {
-  return Boolean(user && hasRole(user, 'SUPER_ADMIN', 'ADMIN'));
-}
+export { isAdminPortalUser };

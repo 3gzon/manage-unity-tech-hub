@@ -13,6 +13,7 @@ import { PrismaService } from '../../infrastructure/database/prisma/prisma.servi
 import type { ListGroupsQueryDto } from './dto/group.dto';
 import { GroupAccessService } from './group-access.service';
 import { formatSchedulesLabel, mapScheduleEntry } from './schedule.util';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const groupInclude = {
   course: true,
@@ -102,6 +103,7 @@ export class GroupsService {
     const group = await this.prisma.$transaction(async (tx) => {
       const created = await tx.group.create({
         data: {
+          branchId: currentBranchId()!,
           name: dto.name.trim(),
           courseId: dto.courseId,
           instructorId: dto.instructorId,
@@ -190,6 +192,7 @@ export class GroupsService {
         try {
           await tx.classSession.create({
             data: {
+              branchId: currentBranchId()!,
               groupId: id,
               sessionDate: dateOnly(schedule.sessionDate),
               startTime: schedule.startTime,

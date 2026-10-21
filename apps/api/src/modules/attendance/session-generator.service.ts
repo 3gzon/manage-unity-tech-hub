@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 @Injectable()
 export class SessionGeneratorService {
@@ -32,6 +33,7 @@ export class SessionGeneratorService {
         try {
           await this.prisma.classSession.create({
             data: {
+              branchId: currentBranchId()!,
               groupId,
               sessionDate: new Date(cursor),
               startTime: schedule.startTime,

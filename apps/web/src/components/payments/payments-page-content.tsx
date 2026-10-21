@@ -11,7 +11,7 @@ import {
   voidPayment,
 } from '@/lib/payments-api';
 import { fetchStudents } from '@/lib/students-api';
-import { hasRole } from '@/lib/auth/authorization';
+import { isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ const METHODS: PaymentMethod[] = ['CASH', 'BANK_TRANSFER', 'CARD', 'OTHER'];
 
 export function PaymentsPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN');
+  const allowed = isAdminPortalUser(user);
 
   const [query, setQuery] = useState<PaymentListQuery>({ page: 1, pageSize: 20 });
   const [payments, setPayments] = useState<PaymentListItem[]>([]);

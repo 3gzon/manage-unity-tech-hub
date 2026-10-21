@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import type { EnrollmentListItem } from '@unity/types';
 import {
   createEnrollment,
+  fetchCourses,
   fetchEnrollments,
   fetchGroups,
   updateEnrollment,
@@ -15,7 +16,7 @@ import { fetchStudents } from '@/lib/students-api';
 import { useAuth } from '@/lib/auth/auth-context';
 import { hasPermission } from '@/lib/auth/authorization';
 import { Button } from '@/components/ui/button';
-import { Input, Label, Select, Textarea } from '@/components/ui/input';
+import { Input, Label, Textarea } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState, EmptyState } from '@/components/dashboard/dashboard-states';
@@ -37,9 +38,9 @@ function todayInput() {
 const emptyForm = () => ({
   studentId: '',
   studentName: '',
-  groupId: '',
+  groupIds: [] as string[],
+  prices: {} as Record<string, string>,
   startDate: todayInput(),
-  agreedMonthlyPrice: '',
   billingEnabled: true,
   waiting: false,
   comment: '',
@@ -51,7 +52,9 @@ export function EnrollmentsPageContent() {
 
   const [enrolled, setEnrolled] = useState<EnrollmentListItem[]>([]);
   const [pending, setPending] = useState<EnrollmentListItem[]>([]);
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<
+    Array<{ id: string; name: string; courseName: string; defaultPrice: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -65,6 +68,12 @@ export function EnrollmentsPageContent() {
   const [withdrawTarget, setWithdrawTarget] = useState<EnrollmentListItem | null>(null);
   const [commentTarget, setCommentTarget] = useState<EnrollmentListItem | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
+  const [statusTarget, setStatusTarget] = useState<EnrollmentListItem | null>(null);
+  const [statusWaiting, setStatusWaiting] = useState(false);
+  const [statusComment, setStatusComment] = useState('');
+  const [statusStart, setStatusStart] = useState('');
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,8 +97,23 @@ export function EnrollmentsPageContent() {
   }, [load]);
 
   useEffect(() => {
-    void fetchGroups({ pageSize: 100 }).then((res) =>
-      setGroups(res.data.map((group) => ({ id: group.id, name: group.name }))),
+    void Promise.all([fetchGroups({ pageSize: 100 }), fetchCourses({ pageSize: 100 })]).then(
+      ([groupResult, courseResult]) => {
+        const prices = new Map(
+          courseResult.data.map((course) => [course.id, course.defaultMonthlyPrice]),
+        );
+        setGroups(
+          groupResult.data.map((group) => {
+            const price = prices.get(group.courseId);
+            return {
+              id: group.id,
+              name: group.name,
+              courseName: group.courseName,
+              defaultPrice: price ? String(Number(price)) : '',
+            };
+          }),
+        );
+      },
     );
   }, []);
 
@@ -114,26 +138,55 @@ export function EnrollmentsPageContent() {
     setCreateOpen(true);
   }
 
+  function toggleGroup(groupId: string, defaultPrice: string) {
+    setForm((prev) => {
+      if (prev.groupIds.includes(groupId)) {
+        const prices = { ...prev.prices };
+        delete prices[groupId];
+        return { ...prev, groupIds: prev.groupIds.filter((id) => id !== groupId), prices };
+      }
+      return {
+        ...prev,
+        groupIds: [...prev.groupIds, groupId],
+        prices: { ...prev.prices, [groupId]: prev.prices[groupId] || defaultPrice },
+      };
+    });
+  }
+
   async function handleCreate() {
     setCreateError(null);
     setSaving(true);
-    try {
-      await createEnrollment({
-        studentId: form.studentId,
-        groupId: form.groupId,
-        startDate: form.startDate,
-        agreedMonthlyPrice: Number(form.agreedMonthlyPrice),
-        billingEnabled: form.billingEnabled,
-        status: form.waiting ? 'PENDING' : 'ACTIVE',
-        notes: form.waiting ? form.comment.trim() : undefined,
-      });
-      setCreateOpen(false);
-      await load();
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Could not enroll the student');
-    } finally {
-      setSaving(false);
+    const failures: string[] = [];
+    const succeeded = new Set<string>();
+    for (const groupId of form.groupIds) {
+      const group = groups.find((item) => item.id === groupId);
+      try {
+        await createEnrollment({
+          studentId: form.studentId,
+          groupId,
+          startDate: form.startDate,
+          agreedMonthlyPrice: Number(form.prices[groupId]),
+          billingEnabled: form.billingEnabled,
+          status: form.waiting ? 'PENDING' : 'ACTIVE',
+          notes: form.waiting ? form.comment.trim() : undefined,
+        });
+        succeeded.add(groupId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Could not enroll the student';
+        failures.push(`${group?.name ?? 'Group'}: ${message}`);
+      }
     }
+    if (succeeded.size) await load();
+    if (failures.length === 0) {
+      setCreateOpen(false);
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        groupIds: prev.groupIds.filter((id) => !succeeded.has(id)),
+      }));
+      setCreateError(failures.join(' '));
+    }
+    setSaving(false);
   }
 
   async function handleStart(enrollment: EnrollmentListItem) {
@@ -143,6 +196,33 @@ export function EnrollmentsPageContent() {
       await load();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not start this enrollment');
+    }
+  }
+
+  function openStatus(enrollment: EnrollmentListItem) {
+    setStatusTarget(enrollment);
+    setStatusWaiting(enrollment.status === 'PENDING');
+    setStatusComment(enrollment.notes ?? '');
+    setStatusStart(enrollment.startDate);
+    setStatusError(null);
+  }
+
+  async function handleSaveStatus() {
+    if (!statusTarget) return;
+    setStatusError(null);
+    setStatusSaving(true);
+    try {
+      await updateEnrollment(statusTarget.id, {
+        status: statusWaiting ? 'PENDING' : 'ACTIVE',
+        notes: statusWaiting ? statusComment.trim() : statusTarget.notes ?? undefined,
+        startDate: statusStart,
+      });
+      setStatusTarget(null);
+      await load();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'Could not update this enrollment');
+    } finally {
+      setStatusSaving(false);
     }
   }
 
@@ -175,7 +255,7 @@ export function EnrollmentsPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Enrollments</h1>
           <p className="text-sm text-muted-foreground">
-            Enroll a student into a group, or keep them waiting until they start.
+            Enroll a student into one or more groups, or keep them waiting until they start.
           </p>
         </div>
         {canManage ? (
@@ -235,6 +315,9 @@ export function EnrollmentsPageContent() {
                             <div className="flex flex-wrap gap-1">
                               <Button variant="ghost" size="sm" onClick={() => void handleStart(enrollment)}>
                                 Start
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openStatus(enrollment)}>
+                                Edit
                               </Button>
                               <Button
                                 variant="ghost"
@@ -308,9 +391,14 @@ export function EnrollmentsPageContent() {
                             </td>
                             <td className="px-4 py-3">{enrollment.billingEnabled ? 'On' : 'Off'}</td>
                             <td className="px-4 py-3">
-                              <Button variant="ghost" size="sm" onClick={() => setWithdrawTarget(enrollment)}>
-                                Withdraw
-                              </Button>
+                              <div className="flex flex-wrap gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openStatus(enrollment)}>
+                                  Edit
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setWithdrawTarget(enrollment)}>
+                                  Withdraw
+                                </Button>
+                              </div>
                             </td>
                           </>
                         ) : null}
@@ -328,7 +416,7 @@ export function EnrollmentsPageContent() {
         <DialogHeader>
           <DialogTitle>Enroll student</DialogTitle>
           <DialogDescription>
-            Search for the student, then start them now or leave them waiting.
+            Tick every group this student should join. Each group keeps its own teacher and monthly price.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -378,20 +466,45 @@ export function EnrollmentsPageContent() {
               </>
             )}
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="enroll-group">Group</Label>
-            <Select
-              id="enroll-group"
-              value={form.groupId}
-              onChange={(event) => setForm((prev) => ({ ...prev, groupId: event.target.value }))}
-            >
-              <option value="">Select group</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </Select>
+          <div className="space-y-2">
+            <Label>Groups</Label>
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+              {groups.map((group) => {
+                const selected = form.groupIds.includes(group.id);
+                return (
+                  <div key={group.id} className="flex items-center gap-2 rounded-md px-1 py-1">
+                    <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleGroup(group.id, group.defaultPrice)}
+                      />
+                      <span className="truncate">
+                        {group.name}
+                        <span className="text-muted-foreground"> · {group.courseName}</span>
+                      </span>
+                    </label>
+                    {selected ? (
+                      <Input
+                        className="h-8 w-24"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Price"
+                        aria-label={`Monthly price for ${group.name}`}
+                        value={form.prices[group.id] ?? ''}
+                        onChange={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            prices: { ...prev.prices, [group.id]: event.target.value },
+                          }))
+                        }
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="enroll-date">{form.waiting ? 'Planned start' : 'Start date'}</Label>
@@ -402,12 +515,6 @@ export function EnrollmentsPageContent() {
               onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
             />
           </div>
-          <Input
-            type="number"
-            placeholder="Monthly price"
-            value={form.agreedMonthlyPrice}
-            onChange={(event) => setForm((prev) => ({ ...prev, agreedMonthlyPrice: event.target.value }))}
-          />
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -446,12 +553,71 @@ export function EnrollmentsPageContent() {
             disabled={
               saving ||
               !form.studentId ||
-              !form.groupId ||
-              !form.agreedMonthlyPrice ||
+              form.groupIds.length === 0 ||
+              form.groupIds.some((id) => (form.prices[id] ?? '') === '') ||
               (form.waiting && !form.comment.trim())
             }
           >
-            {form.waiting ? 'Add to pending' : 'Enroll'}
+            {form.waiting
+              ? form.groupIds.length > 1
+                ? `Add ${form.groupIds.length} to pending`
+                : 'Add to pending'
+              : form.groupIds.length > 1
+                ? `Enroll in ${form.groupIds.length} groups`
+                : 'Enroll'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={Boolean(statusTarget)} onOpenChange={() => setStatusTarget(null)}>
+        <DialogHeader>
+          <DialogTitle>Edit enrollment</DialogTitle>
+          <DialogDescription>
+            {statusTarget
+              ? `${statusTarget.studentName} stays in ${statusTarget.groupName}. Change waiting to start here instead of removing them.`
+              : 'Change whether this student is waiting to start.'}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="status-start">{statusWaiting ? 'Planned start' : 'Start date'}</Label>
+            <Input
+              id="status-start"
+              type="date"
+              value={statusStart}
+              onChange={(event) => setStatusStart(event.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={statusWaiting}
+              onChange={(event) => setStatusWaiting(event.target.checked)}
+            />
+            Waiting to start
+          </label>
+          {statusWaiting ? (
+            <div className="space-y-1">
+              <Label htmlFor="status-comment">Why they are waiting</Label>
+              <Textarea
+                id="status-comment"
+                placeholder="For example: waiting for a laptop, or the course starts next month"
+                value={statusComment}
+                onChange={(event) => setStatusComment(event.target.value)}
+              />
+            </div>
+          ) : null}
+          {statusError ? <p className="text-sm text-red-600">{statusError}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setStatusTarget(null)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void handleSaveStatus()}
+            disabled={statusSaving || !statusStart || (statusWaiting && !statusComment.trim())}
+          >
+            Save
           </Button>
         </DialogFooter>
       </Dialog>

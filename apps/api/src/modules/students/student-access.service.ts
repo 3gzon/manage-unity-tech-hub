@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { isPortalAdmin } from '../../common/auth/portal-access';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 
@@ -8,7 +9,7 @@ export class StudentAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
   isAdmin(user: AuthenticatedUser) {
-    return user.roles.includes('SUPER_ADMIN') || user.roles.includes('ADMIN');
+    return isPortalAdmin(user.roles);
   }
 
   isInstructorOnly(user: AuthenticatedUser) {

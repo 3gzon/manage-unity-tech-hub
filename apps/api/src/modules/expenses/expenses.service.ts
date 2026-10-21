@@ -8,6 +8,7 @@ import { ExpenseStatus, Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 import type {
   CreateExpenseDto,
   ListExpensesQueryDto,
@@ -82,6 +83,7 @@ export class ExpensesService {
 
     const created = await this.prisma.expense.create({
       data: {
+        branchId: currentBranchId()!,
         recordedById: user.id,
         category: dto.category,
         description: dto.description.trim(),

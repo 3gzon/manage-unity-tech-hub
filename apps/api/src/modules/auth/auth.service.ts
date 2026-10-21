@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -7,8 +8,10 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
-import type { AuthUser, SystemRole } from '@unity/types';
+import type { AuthUser, BranchSummary, SystemRole } from '@unity/types';
+import { currentBranchId } from '../../common/branch/branch-context';
 import { AuditService } from '../../infrastructure/audit/audit.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import type { JwtPayload } from '../../common/interfaces/authenticated-user.interface';
 import type { AuthTokensWithRefresh } from './auth.types';
@@ -24,6 +27,7 @@ type UserWithAccess = {
   status: string;
   lastLoginAt: Date | null;
   deletedAt: Date | null;
+  branchId: string | null;
   roles: { role: { name: string; permissions: { permission: { resource: string; action: string } }[] } }[];
 };
 
@@ -34,6 +38,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   async login(dto: LoginDto, ipAddress?: string): Promise<AuthTokensWithRefresh> {
@@ -42,6 +47,10 @@ export class AuthService {
     if (!user || user.deletedAt) {
       await this.recordFailedLogin(dto.email, ipAddress);
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.status === 'PENDING') {
+      throw new ForbiddenException('Confirm your account from the email, then choose a password.');
     }
 
     if (user.status !== 'ACTIVE') {
@@ -54,7 +63,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const authUser = this.toAuthUser(user);
+    const authUser = await this.withBranches(user, this.toAuthUser(user));
     const tokens = await this.issueTokens(user, authUser);
 
     await this.prisma.user.update({
@@ -114,7 +123,7 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    const authUser = this.toAuthUser(storedToken.user as UserWithAccess);
+    const authUser = await this.withBranches(storedToken.user as UserWithAccess, this.toAuthUser(storedToken.user as UserWithAccess));
     const tokens = await this.issueTokens(storedToken.user as UserWithAccess, authUser);
 
     await this.auditService.record({
@@ -151,6 +160,52 @@ export class AuthService {
     });
   }
 
+  async sendConfirmation(userId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw new BadRequestException('Instructor account was not created');
+    const link = await this.issueAccountLink(user.id, 'CONFIRM_ACCOUNT', 7 * 24 * 60 * 60 * 1000);
+    const result = await this.mail.sendAccountLink({
+      to: user.email,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      link,
+      purpose: 'confirm',
+    });
+    if (result.sentTo.length === 0) throw new BadRequestException(result.detail);
+  }
+
+  async forgotPassword(email: string) {
+    const generic = 'If that email has an account, we sent instructions.';
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+    if (!user || user.deletedAt || user.status === 'DISABLED') return { detail: generic };
+
+    if (user.status === 'PENDING') {
+      await this.sendConfirmation(user.id);
+      return { detail: generic };
+    }
+
+    const link = await this.issueAccountLink(user.id, 'RESET_PASSWORD', 60 * 60 * 1000);
+    const result = await this.mail.sendAccountLink({
+      to: user.email,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      link,
+      purpose: 'reset',
+    });
+    if (result.sentTo.length === 0) throw new BadRequestException(result.detail);
+    return { detail: generic };
+  }
+
+  async confirmAccount(token: string, password: string) {
+    await this.consumeAccountToken(token, password, 'CONFIRM_ACCOUNT');
+    return { detail: 'Account confirmed. Sign in with your new password.' };
+  }
+
+  async resetPassword(token: string, password: string) {
+    await this.consumeAccountToken(token, password, 'RESET_PASSWORD');
+    return { detail: 'Password updated. Sign in with your new password.' };
+  }
+
   async getMe(userId: string): Promise<AuthUser> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
@@ -171,7 +226,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    return this.toAuthUser(user as UserWithAccess);
+    return this.withBranches(user as UserWithAccess, this.toAuthUser(user as UserWithAccess));
   }
 
   private async issueTokens(
@@ -258,7 +313,88 @@ export class AuthService {
       roles,
       permissions,
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      branch: null,
+      branches: [],
     };
+  }
+
+  private async withBranches(user: UserWithAccess, auth: AuthUser): Promise<AuthUser> {
+    const rows = await this.prisma.branch.findMany({ orderBy: { sortOrder: 'asc' } });
+    const toSummary = (row: { id: string; code: string; name: string }): BranchSummary => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+    });
+    const home = rows.find((row) => row.id === user.branchId) ?? null;
+    const branches = auth.roles.includes('SUPER_ADMIN')
+      ? rows.map(toSummary)
+      : home
+        ? [toSummary(home)]
+        : [];
+    const activeId = currentBranchId() ?? home?.id ?? branches[0]?.id ?? null;
+    return {
+      ...auth,
+      branches,
+      branch: branches.find((item) => item.id === activeId) ?? branches[0] ?? null,
+    };
+  }
+
+  private async issueAccountLink(userId: string, purpose: 'CONFIRM_ACCOUNT' | 'RESET_PASSWORD', ttlMs: number) {
+    await this.prisma.accountToken.updateMany({
+      where: { userId, purpose, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    const token = randomBytes(32).toString('hex');
+    await this.prisma.accountToken.create({
+      data: {
+        userId,
+        purpose,
+        tokenHash: this.hashToken(token),
+        expiresAt: new Date(Date.now() + ttlMs),
+      },
+    });
+    const origin = (this.configService.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000').replace(/\/$/, '');
+    const path = purpose === 'CONFIRM_ACCOUNT' ? 'confirm-account' : 'reset-password';
+    return `${origin}/${path}?token=${token}`;
+  }
+
+  private async consumeAccountToken(
+    token: string,
+    password: string,
+    purpose: 'CONFIRM_ACCOUNT' | 'RESET_PASSWORD',
+  ) {
+    const stored = await this.prisma.accountToken.findUnique({
+      where: { tokenHash: this.hashToken(token.trim()) },
+      include: { user: true },
+    });
+    if (!stored || stored.usedAt || stored.expiresAt < new Date() || stored.purpose !== purpose) {
+      throw new BadRequestException('This link is invalid or has expired.');
+    }
+    if (stored.user.deletedAt || stored.user.status === 'DISABLED') {
+      throw new BadRequestException('This link is invalid or has expired.');
+    }
+    if (purpose === 'CONFIRM_ACCOUNT' && stored.user.status !== 'PENDING') {
+      throw new BadRequestException('This account is already confirmed. Sign in or use forgot password.');
+    }
+    if (purpose === 'RESET_PASSWORD' && stored.user.status !== 'ACTIVE') {
+      throw new BadRequestException('Confirm your account from the email, then choose a password.');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: stored.userId },
+        data: { passwordHash, status: 'ACTIVE' },
+      }),
+      this.prisma.accountToken.update({
+        where: { id: stored.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
   }
 
   private hashToken(token: string) {

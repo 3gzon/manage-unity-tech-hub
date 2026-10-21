@@ -66,6 +66,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       lastName: user.lastName,
       roles,
       permissions,
+      branchId: user.branchId,
     };
   }
 }

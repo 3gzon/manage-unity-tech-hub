@@ -12,6 +12,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import type { ListCoursesQueryDto } from './dto/course.dto';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 @Injectable()
 export class CoursesService {
@@ -87,6 +88,7 @@ export class CoursesService {
     const code = dto.code?.trim() || (await this.generateUniqueCode(dto.name));
     const course = await this.prisma.course.create({
       data: {
+        branchId: currentBranchId()!,
         code,
         name: dto.name.trim(),
         description: dto.description,
@@ -224,7 +226,7 @@ export class CoursesService {
 
     let code = base;
     let suffix = 1;
-    while (await this.prisma.course.findUnique({ where: { code } })) {
+    while (await this.prisma.course.findFirst({ where: { code } })) {
       code = `${base}-${suffix++}`;
     }
     return code;

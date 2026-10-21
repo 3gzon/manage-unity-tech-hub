@@ -87,6 +87,8 @@ export interface GenerateMonthlyInvoicesResponse {
 
 export interface CreateInvoiceRequest {
   studentId: string;
+  studentIds?: string[];
+  combinedPrice?: number;
   issueDate: string;
   dueDate: string;
   billingPeriod: string;

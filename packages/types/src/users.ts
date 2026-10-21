@@ -1,8 +1,8 @@
 import type { PaginatedResponse } from './pagination';
 
-type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'INSTRUCTOR';
+type SystemRole = 'SUPER_ADMIN' | 'BRANCH_ADMIN' | 'INSTRUCTOR';
 
-export const SYSTEM_ROLES = ['SUPER_ADMIN', 'ADMIN', 'INSTRUCTOR'] as const;
+export const SYSTEM_ROLES = ['SUPER_ADMIN', 'BRANCH_ADMIN', 'INSTRUCTOR'] as const;
 
 export const USER_ACCOUNT_STATUSES = ['ACTIVE', 'DISABLED'] as const;
 
@@ -12,6 +12,7 @@ export interface ManagedUserActions {
   canUpdate: boolean;
   canDisable: boolean;
   canEnable: boolean;
+  canDelete: boolean;
   canResetPassword: boolean;
   assignableRoles: SystemRole[];
 }

@@ -12,7 +12,7 @@ import {
 import { PaymentsService } from './payments.service';
 
 @Controller('payments')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 

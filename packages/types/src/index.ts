@@ -1,4 +1,10 @@
-export type SystemRole = 'SUPER_ADMIN' | 'ADMIN' | 'INSTRUCTOR';
+export type SystemRole = 'SUPER_ADMIN' | 'BRANCH_ADMIN' | 'INSTRUCTOR';
+
+export interface BranchSummary {
+  id: string;
+  code: string;
+  name: string;
+}
 
 export type DatabaseStatus = 'connected' | 'disconnected';
 
@@ -22,6 +28,8 @@ export interface AuthUser {
   roles: SystemRole[];
   permissions: string[];
   lastLoginAt: string | null;
+  branch: BranchSummary | null;
+  branches: BranchSummary[];
 }
 
 export interface AuthTokensResponse {
@@ -56,3 +64,4 @@ export * from './users';
 export * from './instructors';
 export * from './notifications';
 export * from './contracts';
+export * from './materials';

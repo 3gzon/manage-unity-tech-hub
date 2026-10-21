@@ -17,6 +17,7 @@ import type {
 } from '@unity/types';
 import { SYSTEM_ROLES } from '@unity/types';
 import { Prisma, UserStatus } from '@prisma/client';
+import { currentBranchId } from '../../common/branch/branch-context';
 import * as bcrypt from 'bcrypt';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
@@ -37,6 +38,7 @@ import {
   canManagePermissions,
   canMutateTarget,
   creatableRoles,
+  isSuperAdmin,
 } from './users.policy';
 
 const userInclude = {
@@ -63,18 +65,25 @@ export class UsersService {
     const search = query.search?.trim();
 
     const where: Prisma.UserWhereInput = {
-      deletedAt: null,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.role ? { roles: { some: { role: { name: query.role } } } } : {}),
-      ...(search
-        ? {
-            OR: [
-              { firstName: { contains: search, mode: 'insensitive' } },
-              { lastName: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      AND: [
+        {
+          deletedAt: null,
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.role ? { roles: { some: { role: { name: query.role } } } } : {}),
+        },
+        ...(search
+          ? [
+              {
+                OR: [
+                  { firstName: { contains: search, mode: 'insensitive' as const } },
+                  { lastName: { contains: search, mode: 'insensitive' as const } },
+                  { email: { contains: search, mode: 'insensitive' as const } },
+                ],
+              },
+            ]
+          : []),
+        this.branchScope(actor),
+      ],
     };
 
     const [total, users] = await Promise.all([
@@ -101,7 +110,7 @@ export class UsersService {
 
   async findOne(actor: AuthenticatedUser, id: string): Promise<ManagedUser> {
     assertStaffAccess(actor);
-    const user = await this.requireUser(id);
+    const user = await this.requireUser(actor, id);
     const [item] = await this.toItems(actor, [user]);
     if (!item) {
       throw new NotFoundException('User not found');
@@ -124,7 +133,7 @@ export class UsersService {
     ]);
 
     return {
-      roles: [...SYSTEM_ROLES],
+      roles: isSuperAdmin(actor) ? [...SYSTEM_ROLES] : SYSTEM_ROLES.filter((role) => role !== 'SUPER_ADMIN'),
       creatableRoles: creatableRoles(actor),
       canManagePermissions: canManagePermissions(actor),
       instructors: instructors.map(
@@ -164,7 +173,7 @@ export class UsersService {
         permissions:
           role?.permissions.map((entry) => `${entry.permission.resource}.${entry.permission.action}`) ??
           [],
-        canEdit: canManagePermissions(actor) && name !== 'SUPER_ADMIN',
+        canEdit: canManagePermissions(actor) && name === 'INSTRUCTOR',
       };
     });
   }
@@ -184,6 +193,7 @@ export class UsersService {
 
     try {
       const created = await this.prisma.$transaction(async (tx) => {
+        const branchId = dto.role === 'SUPER_ADMIN' ? null : this.requireBranchId();
         const user = existing
           ? await tx.user.update({
               where: { id: existing.id },
@@ -194,6 +204,7 @@ export class UsersService {
                 phone: dto.phone?.trim() || null,
                 status: UserStatus.ACTIVE,
                 deletedAt: null,
+                branchId,
               },
             })
           : await tx.user.create({
@@ -204,6 +215,7 @@ export class UsersService {
                 passwordHash,
                 phone: dto.phone?.trim() || null,
                 status: UserStatus.ACTIVE,
+                branchId,
               },
             });
 
@@ -238,7 +250,7 @@ export class UsersService {
 
   async update(actor: AuthenticatedUser, id: string, dto: UpdateUserDto): Promise<ManagedUser> {
     assertStaffAccess(actor);
-    const current = await this.requireUser(id);
+    const current = await this.requireUser(actor, id);
     const currentRole = this.primaryRole(current);
     assertCanMutate(actor, currentRole);
 
@@ -268,6 +280,9 @@ export class UsersService {
             ...(dto.lastName !== undefined ? { lastName: dto.lastName.trim() } : {}),
             ...(email ? { email } : {}),
             ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
+            ...(dto.role && dto.role !== currentRole
+              ? { branchId: dto.role === 'SUPER_ADMIN' ? null : this.requireBranchId() }
+              : {}),
           },
         });
 
@@ -320,6 +335,54 @@ export class UsersService {
     }
   }
 
+  async remove(actor: AuthenticatedUser, id: string): Promise<void> {
+    assertStaffAccess(actor);
+    if (actor.id === id) {
+      throw new BadRequestException('You cannot delete your own account');
+    }
+
+    const user = await this.requireUser(actor, id);
+    const role = this.primaryRole(user);
+    assertCanMutate(actor, role);
+    if (role === 'SUPER_ADMIN') {
+      const remaining = await this.prisma.user.count({
+        where: {
+          id: { not: id },
+          deletedAt: null,
+          status: UserStatus.ACTIVE,
+          roles: { some: { role: { name: 'SUPER_ADMIN' } } },
+        },
+      });
+      if (remaining === 0) {
+        throw new BadRequestException('Cannot delete the last active Super Admin');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: { deletedAt: new Date(), status: UserStatus.DISABLED },
+      });
+      await tx.instructor.updateMany({
+        where: { userId: id },
+        data: { userId: null },
+      });
+      await this.revokeRefreshTokens(tx, id);
+      await tx.accountToken.updateMany({
+        where: { userId: id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    await this.audit.record({
+      userId: actor.id,
+      action: 'DELETE',
+      entity: 'User',
+      entityId: id,
+      oldValue: this.auditSnapshot(user),
+    });
+  }
+
   async disable(actor: AuthenticatedUser, id: string): Promise<ManagedUser> {
     return this.setStatus(actor, id, 'DISABLED');
   }
@@ -334,7 +397,7 @@ export class UsersService {
     dto: ResetUserPasswordDto,
   ): Promise<ManagedUser> {
     assertStaffAccess(actor);
-    const user = await this.requireUser(id);
+    const user = await this.requireUser(actor, id);
     const role = this.primaryRole(user);
     assertCanMutate(actor, role);
 
@@ -370,12 +433,8 @@ export class UsersService {
       throw new ForbiddenException('Only Super Admins can manage permissions');
     }
 
-    if (roleName === 'SUPER_ADMIN') {
-      throw new ForbiddenException('Super Admin permissions cannot be modified');
-    }
-
-    if (roleName !== 'ADMIN' && roleName !== 'INSTRUCTOR') {
-      throw new BadRequestException('Only the three system roles are supported');
+    if (roleName !== 'INSTRUCTOR') {
+      throw new ForbiddenException('Only Instructor permissions can be changed');
     }
 
     const role = await this.prisma.role.findUnique({
@@ -438,7 +497,7 @@ export class UsersService {
     status: UserAccountStatus,
   ): Promise<ManagedUser> {
     assertStaffAccess(actor);
-    const user = await this.requireUser(id);
+    const user = await this.requireUser(actor, id);
     const role = this.primaryRole(user);
     assertCanMutate(actor, role);
 
@@ -476,9 +535,30 @@ export class UsersService {
     return item;
   }
 
-  private async requireUser(id: string): Promise<UserRecord> {
+  private branchScope(actor: AuthenticatedUser): Prisma.UserWhereInput {
+    const branchId = currentBranchId();
+    if (!branchId) {
+      return isSuperAdmin(actor) ? {} : { id: { in: [] } };
+    }
+    if (isSuperAdmin(actor)) {
+      return {
+        OR: [{ branchId }, { roles: { some: { role: { name: 'SUPER_ADMIN' } } } }],
+      };
+    }
+    return { branchId };
+  }
+
+  private requireBranchId() {
+    const branchId = currentBranchId();
+    if (!branchId) {
+      throw new BadRequestException('Choose a branch first');
+    }
+    return branchId;
+  }
+
+  private async requireUser(actor: AuthenticatedUser, id: string): Promise<UserRecord> {
     const user = await this.prisma.user.findFirst({
-      where: { id, deletedAt: null },
+      where: { AND: [{ id, deletedAt: null }, this.branchScope(actor)] },
       include: userInclude,
     });
     if (!user) {
@@ -584,6 +664,7 @@ export class UsersService {
           canUpdate: mutable,
           canDisable: mutable && status === 'ACTIVE' && !isLastSuperAdmin,
           canEnable: mutable && status === 'DISABLED',
+          canDelete: mutable && actor.id !== user.id && !isLastSuperAdmin,
           canResetPassword: mutable,
           assignableRoles: assignableRoles(actor, role),
         },

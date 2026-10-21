@@ -6,7 +6,7 @@ import { ListNotificationsQueryDto } from './dto/notification.dto';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 

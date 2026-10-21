@@ -38,6 +38,16 @@ export interface InvoicePdfEmailInput {
   pdf: Buffer;
 }
 
+export interface FeedbackPdfEmailInput {
+  to: string;
+  studentName: string;
+  courseName: string;
+  groupName: string;
+  period: string;
+  instructorName: string;
+  pdf: Buffer;
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -137,6 +147,70 @@ export class MailService {
           contentType: 'application/pdf',
         },
       ],
+    );
+  }
+
+  async sendFeedbackPdf(input: FeedbackPdfEmailInput): Promise<EmailSendResult> {
+    const recipient = input.to.trim().toLowerCase();
+    if (!recipient) {
+      return { sentTo: [], detail: 'Enter an email address.' };
+    }
+
+    const safeName = input.studentName.replace(/[^\w.-]+/g, '-').replace(/-+/g, '-');
+    return this.deliver(
+      [recipient],
+      `Vlerësimi i ${input.studentName} — ${input.period}`,
+      [
+        'Përshëndetje,',
+        '',
+        `Bashkëngjitur është vlerësimi i ${input.studentName} për ${input.courseName} (${input.groupName}).`,
+        `Periudha: ${input.period}`,
+        `Instruktori: ${input.instructorName}`,
+        '',
+        'Unity Tech Hub',
+      ].join('\n'),
+      `Feedback email failed for ${input.studentName}`,
+      'The feedback could not be emailed. Check the address and try again.',
+      [
+        {
+          filename: `Vleresim-${safeName}.pdf`,
+          content: input.pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    );
+  }
+
+  async sendAccountLink(input: {
+    to: string;
+    name: string;
+    link: string;
+    purpose: 'confirm' | 'reset';
+  }): Promise<EmailSendResult> {
+    const recipient = input.to.trim().toLowerCase();
+    if (!recipient) {
+      return { sentTo: [], detail: 'Enter an email address.' };
+    }
+
+    const confirm = input.purpose === 'confirm';
+    return this.deliver(
+      [recipient],
+      confirm ? 'Confirm your Unity Tech Hub account' : 'Reset your Unity Tech Hub password',
+      [
+        `Hello ${input.name},`,
+        '',
+        confirm
+          ? 'Confirm your instructor account and choose a password. This link expires in 7 days.'
+          : 'Choose a new password for your Unity Tech Hub account. This link expires in 1 hour.',
+        '',
+        input.link,
+        '',
+        'If you did not expect this email, you can ignore it.',
+        '',
+        'Unity Tech Hub',
+      ].join('\n'),
+      `Account email failed for ${recipient}`,
+      'The email could not be sent. Check the address and the mail settings, then try again.',
     );
   }
 

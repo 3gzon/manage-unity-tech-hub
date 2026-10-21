@@ -12,6 +12,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import { GroupAccessService } from '../groups/group-access.service';
 import type { ListEnrollmentsQueryDto } from './dto/enrollment.dto';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const ACTIVE_STATUSES = ['ACTIVE', 'PENDING'] as const;
 
@@ -104,6 +105,7 @@ export class EnrollmentsService {
 
     const enrollment = await this.prisma.enrollment.create({
       data: {
+        branchId: currentBranchId()!,
         studentId: dto.studentId,
         groupId: dto.groupId,
         startDate: new Date(dto.startDate),

@@ -25,7 +25,7 @@ import {
 import { CompensationService } from './compensation.service';
 
 @Controller('compensation')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class CompensationController {
   constructor(private readonly compensationService: CompensationService) {}
 

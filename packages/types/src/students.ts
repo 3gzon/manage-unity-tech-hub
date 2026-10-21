@@ -59,6 +59,7 @@ export interface StudentEnrollmentSummary {
   groupName: string;
   courseId: string;
   courseName: string;
+  instructorName: string | null;
   status: string;
   startDate: string;
   endDate: string | null;

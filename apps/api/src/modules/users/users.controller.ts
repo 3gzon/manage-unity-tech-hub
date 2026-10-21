@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -13,7 +13,7 @@ import {
 import { UsersService } from './users.service';
 
 @Controller('users')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -65,6 +65,13 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.usersService.update(user, id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Permissions('users.manage')
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.usersService.remove(user, id);
   }
 
   @Post(':id/disable')

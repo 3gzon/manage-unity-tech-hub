@@ -26,7 +26,7 @@ import {
 import { InvoicesService } from './invoices.service';
 
 @Controller('invoices')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 

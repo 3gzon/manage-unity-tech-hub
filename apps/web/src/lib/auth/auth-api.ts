@@ -1,4 +1,5 @@
 import type { AuthTokensResponse, AuthUser, LoginRequest } from '@unity/types';
+import { getStoredBranchId } from './branch-storage';
 
 const DEFAULT_API_URL = 'http://localhost:3001/api';
 
@@ -11,6 +12,7 @@ async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(getStoredBranchId() ? { 'X-Branch-Id': getStoredBranchId() as string } : {}),
       ...init?.headers,
     },
     credentials: 'include',
@@ -54,6 +56,27 @@ export async function logoutRequest(accessToken: string): Promise<void> {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+  });
+}
+
+export async function forgotPasswordRequest(email: string): Promise<{ detail: string }> {
+  return authFetch<{ detail: string }>('auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmAccountRequest(token: string, password: string): Promise<{ detail: string }> {
+  return authFetch<{ detail: string }>('auth/confirm-account', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+export async function resetPasswordRequest(token: string, password: string): Promise<{ detail: string }> {
+  return authFetch<{ detail: string }>('auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
   });
 }
 

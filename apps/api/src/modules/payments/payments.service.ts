@@ -19,6 +19,7 @@ import type {
   UpdatePaymentDto,
 } from './dto/payment.dto';
 import { TuitionQuoteService } from './tuition-quote.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 const ZERO = new Prisma.Decimal(0);
 const TUITION_DISCOUNT_NOTE = 'Automatic tuition discount:';
@@ -145,6 +146,7 @@ export class PaymentsService {
 
     const created = await this.prisma.payment.create({
       data: {
+        branchId: currentBranchId()!,
         studentId: dto.studentId,
         invoiceId,
         recordedById: user.id,

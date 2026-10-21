@@ -217,7 +217,7 @@ export function StudentForm({
           ) : null}
         </div>
         <div className="min-w-0">
-          <Label htmlFor="instructorId">Instructor</Label>
+          <Label htmlFor="instructorId">Primary instructor</Label>
           <Select id="instructorId" {...form.register('instructorId')}>
             <option value="">No instructor</option>
             {instructors.map((instructor) => (
@@ -226,6 +226,9 @@ export function StudentForm({
               </option>
             ))}
           </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Each course uses the teacher of its group. Enroll the student in every course so both teachers see them.
+          </p>
           {errors.instructorId ? (
             <p className="mt-1 text-xs text-red-600" role="alert">
               {errors.instructorId.message}

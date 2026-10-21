@@ -12,7 +12,7 @@ import {
 import { ExpensesService } from './expenses.service';
 
 @Controller('expenses')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 

@@ -1,6 +1,7 @@
 'use client';
 
 import type { AuthUser, LoginRequest } from '@unity/types';
+import { clearStoredBranchId, getStoredBranchId, setStoredBranchId } from './branch-storage';
 import {
   createContext,
   useCallback,
@@ -25,6 +26,14 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function rememberBranch(user: AuthUser) {
+  const stored = getStoredBranchId();
+  const match = user.branches?.find((branch) => branch.id === stored);
+  if (match) return { ...user, branch: match };
+  if (user.branch) setStoredBranchId(user.branch.id);
+  return user;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -37,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const profile = await meRequest(token);
+    const profile = rememberBranch(await meRequest(token));
     setUser(profile);
   }, []);
 
@@ -50,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           const refreshed = await refreshRequest();
           setAccessToken(refreshed.accessToken);
-          setUser(refreshed.user);
+          setUser(rememberBranch(refreshed.user));
         }
       } catch {
         clearAccessToken();
@@ -67,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (credentials: LoginRequest) => {
       const response = await loginRequest(credentials);
       setAccessToken(response.accessToken);
-      setUser(response.user);
+      setUser(rememberBranch(response.user));
       router.push('/dashboard');
     },
     [router],
@@ -81,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       clearAccessToken();
+      clearStoredBranchId();
       setUser(null);
       router.push('/login');
     }

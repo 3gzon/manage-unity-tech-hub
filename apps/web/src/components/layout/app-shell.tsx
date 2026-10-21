@@ -9,6 +9,7 @@ import { MobileNav } from '@/components/layout/mobile-nav';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { ProfileMenu } from '@/components/layout/profile-menu';
 import { useAuth } from '@/lib/auth/auth-context';
+import { setStoredBranchId } from '@/lib/auth/branch-storage';
 import { getNavigationSections, type NavItem } from '@/lib/navigation';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -42,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <MobileNav sections={sections} />
                 <div className="min-w-0">
                   <h1 className="truncate text-xl font-bold tracking-tight text-[#020D23] md:text-2xl">{title}</h1>
-                  <p className="text-xs text-slate-400">Unity Tech Hub</p>
+                  <p className="text-xs text-slate-400">{user?.branch?.name ?? 'Unity Tech Hub'}</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -82,6 +83,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   ) : null}
                 </div>
+                {user && user.branches.length > 1 ? (
+                  <label className="hidden items-center gap-2 sm:flex">
+                    <span className="text-xs font-medium text-slate-400">Branch</span>
+                    <select
+                      aria-label="Branch"
+                      value={user.branch?.id ?? ''}
+                      onChange={(event) => {
+                        setStoredBranchId(event.target.value);
+                        window.location.reload();
+                      }}
+                      className="h-10 rounded-full border border-slate-100 bg-slate-50 px-3 text-sm font-medium text-[#020D23] outline-none focus:border-[#046bd2]/40 focus:ring-2 focus:ring-[#046bd2]/15"
+                    >
+                      {user.branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <NotificationBell />
                 <ProfileMenu />
               </div>

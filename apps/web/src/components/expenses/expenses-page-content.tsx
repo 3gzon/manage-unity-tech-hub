@@ -16,7 +16,7 @@ import {
   updateExpense,
   voidExpense,
 } from '@/lib/expenses-api';
-import { hasPermission, hasRole } from '@/lib/auth/authorization';
+import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ function emptyForm() {
 
 export function ExpensesPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN');
+  const allowed = isAdminPortalUser(user);
   const canManage = hasPermission(user, 'expenses.manage');
 
   const [query, setQuery] = useState<ExpenseListQuery>({ page: 1, pageSize: 20 });

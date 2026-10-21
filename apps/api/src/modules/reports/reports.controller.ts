@@ -5,7 +5,7 @@ import { FinancialReportQueryDto } from './dto/financial-report.dto';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 

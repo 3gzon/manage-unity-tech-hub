@@ -19,17 +19,28 @@ import {
   ListInstructorsQueryDto,
   UpdateInstructorDto,
 } from './dto/instructor.dto';
+import { SendStudentFeedbackDto } from './dto/feedback.dto';
+import { FeedbackService } from './feedback.service';
 import { InstructorsService } from './instructors.service';
 
 @Controller('instructors')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 export class InstructorsController {
-  constructor(private readonly instructorsService: InstructorsService) {}
+  constructor(
+    private readonly instructorsService: InstructorsService,
+    private readonly feedbackService: FeedbackService,
+  ) {}
 
   @Get()
   @Permissions('instructors.read')
   findAll(@Query() query: ListInstructorsQueryDto) {
     return this.instructorsService.findAll(query);
+  }
+
+  @Get('me')
+  @Roles('INSTRUCTOR', 'SUPER_ADMIN', 'BRANCH_ADMIN')
+  findMine(@CurrentUser() user: AuthenticatedUser) {
+    return this.instructorsService.findMine(user);
   }
 
   @Get('options')
@@ -48,6 +59,16 @@ export class InstructorsController {
   @Permissions('instructors.read')
   findOne(@Param('id') id: string) {
     return this.instructorsService.findOne(id);
+  }
+
+  @Post(':id/feedback')
+  @Roles('INSTRUCTOR', 'SUPER_ADMIN', 'BRANCH_ADMIN')
+  sendFeedback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SendStudentFeedbackDto,
+  ) {
+    return this.feedbackService.send(user, id, dto);
   }
 
   @Post()

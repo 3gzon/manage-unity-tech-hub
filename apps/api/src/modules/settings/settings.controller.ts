@@ -7,7 +7,7 @@ import { UpdateSettingsDto } from './dto/settings.dto';
 import { SettingsService } from './settings.service';
 
 @Controller('settings')
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'BRANCH_ADMIN')
 @Permissions('settings.manage')
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}

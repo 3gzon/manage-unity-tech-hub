@@ -7,12 +7,12 @@ export function isSuperAdmin(user: AuthenticatedUser) {
   return user.roles.includes('SUPER_ADMIN');
 }
 
-export function isAdmin(user: AuthenticatedUser) {
-  return user.roles.includes('ADMIN');
+export function isBranchAdmin(user: AuthenticatedUser) {
+  return user.roles.includes('BRANCH_ADMIN');
 }
 
 export function assertStaffAccess(user: AuthenticatedUser) {
-  if (isSuperAdmin(user) || isAdmin(user)) {
+  if (isSuperAdmin(user) || isBranchAdmin(user)) {
     return;
   }
   throw new ForbiddenException('Instructors cannot access user management');
@@ -20,7 +20,10 @@ export function assertStaffAccess(user: AuthenticatedUser) {
 
 export function creatableRoles(actor: AuthenticatedUser): SystemRole[] {
   if (isSuperAdmin(actor)) {
-    return SYSTEM_ROLES.filter((role) => role !== 'INSTRUCTOR');
+    return ['BRANCH_ADMIN', 'SUPER_ADMIN'];
+  }
+  if (isBranchAdmin(actor)) {
+    return ['BRANCH_ADMIN'];
   }
   return [];
 }
@@ -29,8 +32,8 @@ export function canMutateTarget(actor: AuthenticatedUser, targetRole: SystemRole
   if (isSuperAdmin(actor)) {
     return true;
   }
-  if (isAdmin(actor)) {
-    return targetRole === 'INSTRUCTOR';
+  if (isBranchAdmin(actor)) {
+    return targetRole !== 'SUPER_ADMIN';
   }
   return false;
 }
@@ -45,7 +48,7 @@ export function assignableRoles(
   if (isSuperAdmin(actor)) {
     return [...SYSTEM_ROLES];
   }
-  return ['INSTRUCTOR'];
+  return ['BRANCH_ADMIN', 'INSTRUCTOR'];
 }
 
 export function canAssignRole(
@@ -62,13 +65,6 @@ export function canManagePermissions(actor: AuthenticatedUser) {
 
 export function assertCanCreate(actor: AuthenticatedUser, role: SystemRole) {
   if (!creatableRoles(actor).includes(role)) {
-    if (isAdmin(actor) && (role === 'SUPER_ADMIN' || role === 'ADMIN')) {
-      throw new ForbiddenException(
-        role === 'SUPER_ADMIN'
-          ? 'Admins cannot create Super Admin users'
-          : 'Admins cannot create Admin users or promote themselves',
-      );
-    }
     throw new ForbiddenException('You cannot create a user with this role');
   }
 }
@@ -77,11 +73,6 @@ export function assertCanMutate(actor: AuthenticatedUser, targetRole: SystemRole
   if (canMutateTarget(actor, targetRole)) {
     return;
   }
-
-  if (isAdmin(actor) && targetRole === 'SUPER_ADMIN') {
-    throw new ForbiddenException('Admins cannot edit Super Admin users');
-  }
-
   throw new ForbiddenException('You cannot manage this user');
 }
 
@@ -93,14 +84,5 @@ export function assertCanAssignRole(
   if (canAssignRole(actor, targetRole, nextRole)) {
     return;
   }
-
-  if (isAdmin(actor) && nextRole === 'SUPER_ADMIN') {
-    throw new ForbiddenException('Admins cannot assign the Super Admin role');
-  }
-
-  if (isAdmin(actor) && nextRole === 'ADMIN') {
-    throw new ForbiddenException('Admins cannot promote users to Admin');
-  }
-
   throw new ForbiddenException('You cannot assign this role');
 }

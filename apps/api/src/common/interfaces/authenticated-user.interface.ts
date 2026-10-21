@@ -7,6 +7,7 @@ export interface AuthenticatedUser {
   lastName: string;
   roles: SystemRole[];
   permissions: string[];
+  branchId: string | null;
 }
 
 export interface JwtPayload {

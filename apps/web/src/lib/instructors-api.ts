@@ -5,6 +5,10 @@ import type {
   InstructorListResponse,
   InstructorLookups,
   InstructorOption,
+  SendStudentFeedbackRequest,
+  SendStudentFeedbackResponse,
+  StudentFeedbackListQuery,
+  StudentFeedbackListResponse,
   UpdateInstructorRequest,
 } from '@unity/types';
 import { api } from '@/lib/api-client';
@@ -21,6 +25,26 @@ export function fetchInstructors(query: InstructorListQuery = {}) {
 
 export function fetchInstructor(id: string) {
   return api.get<InstructorDetail>(`instructors/${id}`);
+}
+
+export function fetchMyInstructor() {
+  return api.get<InstructorDetail>('instructors/me');
+}
+
+export function sendStudentFeedback(instructorId: string, data: SendStudentFeedbackRequest) {
+  return api.post<SendStudentFeedbackResponse>(`instructors/${instructorId}/feedback`, data);
+}
+
+export function fetchFeedback(query: StudentFeedbackListQuery = {}) {
+  return api.get<StudentFeedbackListResponse>('feedback', {
+    params: {
+      page: query.page,
+      pageSize: query.pageSize,
+      search: query.search,
+      studentId: query.studentId,
+      instructorId: query.instructorId,
+    },
+  });
 }
 
 export function fetchInstructorOptions() {

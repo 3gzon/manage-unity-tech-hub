@@ -14,6 +14,7 @@ import { CompensationCalculationType, CompensationStatus as PrismaCompensationSt
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 import type {
   AdjustCompensationDto,
   CalculateCompensationDto,
@@ -103,6 +104,7 @@ export class CompensationService {
     }
     const rule = await this.prisma.instructorCompensationRule.create({
       data: {
+        branchId: currentBranchId()!,
         instructorId: dto.instructorId,
         courseId: dto.courseId,
         groupId: dto.groupId,
@@ -357,6 +359,7 @@ export class CompensationService {
           },
         },
         create: {
+          branchId: currentBranchId()!,
           instructorId: dto.instructorId,
           groupId: line.groupId,
           period,

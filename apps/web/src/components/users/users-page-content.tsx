@@ -12,10 +12,11 @@ import type {
   UserManagementLookups,
 } from '@unity/types';
 import { SYSTEM_ROLES, USER_ACCOUNT_STATUSES } from '@unity/types';
-import { hasPermission, hasRole } from '@/lib/auth/authorization';
+import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import {
   createUser,
+  deleteUser,
   disableUser,
   enableUser,
   fetchUserLookups,
@@ -34,7 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 const ROLE_LABELS: Record<SystemRole, string> = {
   SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Admin',
+  BRANCH_ADMIN: 'Sub Super Admin',
   INSTRUCTOR: 'Instructor',
 };
 
@@ -56,7 +57,7 @@ function formatLastLogin(value: string | null) {
 
 export function UsersPageContent() {
   const { user } = useAuth();
-  const allowed = hasRole(user, 'SUPER_ADMIN', 'ADMIN') && hasPermission(user, 'users.read');
+  const allowed = isAdminPortalUser(user) && hasPermission(user, 'users.read');
   const canManage = hasPermission(user, 'users.manage');
 
   const [query, setQuery] = useState<ManagedUserListQuery>({ page: 1, pageSize: 20 });
@@ -78,6 +79,8 @@ export function UsersPageContent() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const [statusTarget, setStatusTarget] = useState<ManagedUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [permissionDrafts, setPermissionDrafts] = useState<Record<string, string[]>>({});
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [savingRole, setSavingRole] = useState<string | null>(null);
@@ -210,6 +213,18 @@ export function UsersPageContent() {
     }
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteError(null);
+    try {
+      await deleteUser(deleteTarget.id);
+      setDeleteTarget(null);
+      await Promise.all([load(), loadLookups()]);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete user');
+    }
+  }
+
   async function handleStatusChange() {
     if (!statusTarget) return;
     try {
@@ -255,7 +270,7 @@ export function UsersPageContent() {
     return (
       <EmptyState
         title="Access restricted"
-        description="User management is available only to Super Admins and Admins."
+        description="User management is available to Super Admins and Sub Super Admins."
       />
     );
   }
@@ -266,7 +281,7 @@ export function UsersPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-sm text-muted-foreground">
-            Create a login and choose a role.
+            Create a login and choose a role. A Sub Super Admin belongs to the branch shown in the header.
           </p>
         </div>
         {canManage && creatableRoleOptions.length > 0 ? (
@@ -291,7 +306,7 @@ export function UsersPageContent() {
           }
         >
           <option value="">All roles</option>
-          {SYSTEM_ROLES.map((role) => (
+          {(lookups?.roles ?? SYSTEM_ROLES).map((role) => (
             <option key={role} value={role}>
               {ROLE_LABELS[role]}
             </option>
@@ -369,6 +384,18 @@ export function UsersPageContent() {
                           Reset password
                         </Button>
                       ) : null}
+                      {item.actions.canDelete ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDeleteTarget(item);
+                            setDeleteError(null);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
                       {item.actions.canDisable ? (
                         <Button variant="ghost" size="sm" onClick={() => setStatusTarget(item)}>
                           Disable
@@ -417,13 +444,13 @@ export function UsersPageContent() {
           <div>
             <h2 className="text-lg font-semibold">Role permissions</h2>
             <p className="text-sm text-muted-foreground">
-              Super Admin permissions are fixed. Changes apply to Admin and Instructor roles only.
+              Super Admin and Sub Super Admin permissions stay fixed. Changes apply to the Instructor role.
             </p>
           </div>
           {permissionError ? <p className="text-sm text-red-600">{permissionError}</p> : null}
           <div className="grid gap-4 lg:grid-cols-2">
             {roles
-              .filter((role) => role.name !== 'SUPER_ADMIN')
+              .filter((role) => role.name === 'INSTRUCTOR')
               .map((role) => (
                 <div key={role.name} className="space-y-3 rounded-lg border p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -474,7 +501,9 @@ export function UsersPageContent() {
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit user' : 'Create user'}</DialogTitle>
           <DialogDescription>
-            {editing ? 'Update the name, email, and role.' : 'Accounts start active.'}
+            {editing
+              ? 'Update the name, email, and role.'
+              : 'Choose Sub Super Admin for a branch manager. That account opens the branch shown in the header.'}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 md:grid-cols-2">
@@ -530,6 +559,14 @@ export function UsersPageContent() {
                 </option>
               ))}
             </Select>
+            {form.role === 'BRANCH_ADMIN' ? (
+              <p className="text-xs text-muted-foreground">
+                This account manages {user?.branch?.name ?? 'the current branch'}.
+              </p>
+            ) : null}
+            {form.role === 'SUPER_ADMIN' ? (
+              <p className="text-xs text-muted-foreground">This account can open every branch.</p>
+            ) : null}
           </div>
           {formError ? <p className="text-sm text-red-600 md:col-span-2">{formError}</p> : null}
         </div>
@@ -579,6 +616,25 @@ export function UsersPageContent() {
             Cancel
           </Button>
           <Button onClick={() => void handlePasswordReset()}>Reset password</Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogHeader>
+          <DialogTitle>Delete user</DialogTitle>
+          <DialogDescription>
+            {deleteTarget?.name} will be removed from the user list and will no longer be able to sign in.
+            Instructor, student, and payment records stay in place.
+          </DialogDescription>
+        </DialogHeader>
+        {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button className="bg-[#F50057] text-white hover:bg-[#F50057]/90" onClick={() => void handleDelete()}>
+            Delete
+          </Button>
         </DialogFooter>
       </Dialog>
 

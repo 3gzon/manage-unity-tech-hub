@@ -14,6 +14,7 @@ import type { SaveGroupAttendanceDto, UpdateSessionAttendanceDto } from './dto/a
 import { NotificationsService } from '../notifications/notifications.service';
 import { SessionsService } from './sessions.service';
 import { MailService } from '../../infrastructure/mail/mail.service';
+import { currentBranchId } from '../../common/branch/branch-context';
 
 @Injectable()
 export class AttendanceRecordsService {
@@ -129,6 +130,7 @@ export class AttendanceRecordsService {
             },
           },
           create: {
+            branchId: currentBranchId()!,
             classSessionId: sessionId,
             studentId: record.studentId,
             status: record.status,
@@ -335,6 +337,7 @@ export class AttendanceRecordsService {
             },
           },
           create: {
+            branchId: currentBranchId()!,
             classSessionId: change.sessionId,
             studentId: change.studentId,
             status: change.mark,
