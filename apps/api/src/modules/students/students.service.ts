@@ -681,6 +681,7 @@ export class StudentsService {
       status: enrollment.status,
       startDate: enrollment.startDate.toISOString().slice(0, 10),
       endDate: enrollment.endDate?.toISOString().slice(0, 10) ?? null,
+      agreedMonthlyPrice: enrollment.agreedMonthlyPrice.toString(),
     };
   }
 

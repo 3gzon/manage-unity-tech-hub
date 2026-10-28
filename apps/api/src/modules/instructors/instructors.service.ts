@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
@@ -63,6 +64,8 @@ type InstructorRecord = Prisma.InstructorGetPayload<{ include: typeof instructor
 
 @Injectable()
 export class InstructorsService {
+  private readonly logger = new Logger(InstructorsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -235,12 +238,23 @@ export class InstructorsService {
         newValue: this.auditSnapshot(created),
       });
 
+      if (!created.userId) {
+        await this.removeUnconfirmed(created.id, null, existingUser);
+        throw new BadRequestException('Instructor account was not created');
+      }
       try {
-        if (!created.userId) throw new BadRequestException('Instructor account was not created');
         await this.auth.sendConfirmation(created.userId);
-      } catch (error) {
-        await this.removeUnconfirmed(created.id, created.userId, existingUser);
-        throw error;
+      } catch (emailError) {
+        // If only the email delivery failed (e.g. SMTP not configured), keep the
+        // instructor in PENDING state — an admin can resend the invitation later.
+        // Roll back only for unexpected errors (database, token generation, etc.).
+        const msg = emailError instanceof Error ? emailError.message : String(emailError);
+        if (msg.includes('SMTP') || msg.includes('not configured') || msg.includes('could not be sent')) {
+          this.logger.warn(`Instructor ${created.email} created but confirmation email not sent: ${msg}`);
+        } else {
+          await this.removeUnconfirmed(created.id, created.userId, existingUser);
+          throw emailError;
+        }
       }
 
       return this.toDetail(created);

@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { StudentProfileResponse } from '@unity/types';
+import { fetchGroups, updateEnrollment } from '@/lib/academics-api';
 import { fetchInstructors } from '@/lib/instructors-api';
 import { addFamilyMember, archiveStudent, fetchStudent, fetchStudents, leaveFamily, updateStudent } from '@/lib/students-api';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/input';
 import { FeedbackHistory } from '@/components/instructors/feedback-history';
-import { StudentForm } from '@/components/students/student-form';
+import { StudentForm, type EnrollmentGroupChange, type StudentGroupOption } from '@/components/students/student-form';
 import { toStudentRequest, type StudentFormValues } from '@/lib/schemas/student.schema';
 
 export function StudentProfileContent() {
@@ -30,6 +31,7 @@ export function StudentProfileContent() {
   const isAdmin = isAdminPortalUser(user);
   const canUpdate = hasPermission(user, 'students.update');
   const canArchive = hasPermission(user, 'students.archive');
+  const canManageEnrollments = hasPermission(user, 'enrollments.manage');
 
   const [profile, setProfile] = useState<StudentProfileResponse | null>(null);
   const [tab, setTab] = useState('overview');
@@ -39,8 +41,17 @@ export function StudentProfileContent() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [students, setStudents] = useState<Array<{ id: string; name: string }>>([]);
   const [instructors, setInstructors] = useState<Array<{ id: string; name: string }>>([]);
+  const [groups, setGroups] = useState<StudentGroupOption[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(canUpdate && canManageEnrollments);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
   const [familyMemberId, setFamilyMemberId] = useState('');
   const [familyError, setFamilyError] = useState<string | null>(null);
+  const [editingEnrollmentId, setEditingEnrollmentId] = useState<string | null>(null);
+  const [enrollEditCourseId, setEnrollEditCourseId] = useState('');
+  const [enrollEditGroupId, setEnrollEditGroupId] = useState('');
+  const [enrollEditPrice, setEnrollEditPrice] = useState('');
+  const [enrollEditSaving, setEnrollEditSaving] = useState(false);
+  const [enrollEditError, setEnrollEditError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,11 +79,103 @@ export function StudentProfileContent() {
       .catch(() => setInstructors([]));
   }, [canUpdate]);
 
+  useEffect(() => {
+    if (!canUpdate || !canManageEnrollments) return;
+    let cancelled = false;
+    setGroupsLoading(true);
+    setGroupsError(null);
+    void (async () => {
+      try {
+        const first = await fetchGroups({ page: 1, pageSize: 100, sortBy: 'name', sortOrder: 'asc' });
+        const rest = await Promise.all(
+          Array.from({ length: Math.max(0, first.meta.totalPages - 1) }, (_, index) =>
+            fetchGroups({ page: index + 2, pageSize: 100, sortBy: 'name', sortOrder: 'asc' }),
+          ),
+        );
+        if (cancelled) return;
+        setGroups(
+          [first, ...rest].flatMap((page) =>
+            page.data.map((group) => ({
+              id: group.id,
+              name: group.name,
+              courseId: group.courseId,
+              courseName: group.courseName,
+              instructorName: group.instructorName,
+              status: group.status,
+            })),
+          ),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setGroupsError(err instanceof Error ? err.message : 'Could not load courses');
+        }
+      } finally {
+        if (!cancelled) setGroupsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canUpdate, canManageEnrollments]);
+
+  const editingEnrollment = useMemo(
+    () => (editingEnrollmentId ? (profile?.enrollments.find((e) => e.id === editingEnrollmentId) ?? null) : null),
+    [editingEnrollmentId, profile],
+  );
+
+  useEffect(() => {
+    if (!editingEnrollment) return;
+    setEnrollEditCourseId(editingEnrollment.courseId);
+    setEnrollEditGroupId(editingEnrollment.groupId);
+    setEnrollEditPrice(editingEnrollment.agreedMonthlyPrice);
+    setEnrollEditError(null);
+  }, [editingEnrollment]);
+
+  const enrollEditCourses = useMemo(
+    () => [...new Map(groups.map((g) => [g.courseId, { id: g.courseId, name: g.courseName }])).values()],
+    [groups],
+  );
+  const enrollEditGroups = useMemo(
+    () => groups.filter((g) => g.courseId === enrollEditCourseId),
+    [groups, enrollEditCourseId],
+  );
+
+  async function handleEnrollmentSave() {
+    if (!editingEnrollment) return;
+    setEnrollEditSaving(true);
+    setEnrollEditError(null);
+    try {
+      const data: Record<string, unknown> = {};
+      if (enrollEditGroupId && enrollEditGroupId !== editingEnrollment.groupId) data.groupId = enrollEditGroupId;
+      const priceNum = parseFloat(enrollEditPrice);
+      if (enrollEditPrice !== '' && !isNaN(priceNum) && enrollEditPrice !== editingEnrollment.agreedMonthlyPrice) {
+        data.agreedMonthlyPrice = priceNum;
+      }
+      if (Object.keys(data).length > 0) await updateEnrollment(editingEnrollment.id, data);
+      setEditingEnrollmentId(null);
+      await load();
+    } catch (err) {
+      setEnrollEditError(err instanceof Error ? err.message : 'Could not save enrollment');
+    } finally {
+      setEnrollEditSaving(false);
+    }
+  }
+
   const tabs = isAdmin
     ? ['overview', 'enrollments', 'attendance', 'feedback', 'invoices', 'payments', 'certificates', 'comments']
     : ['overview', 'enrollments', 'attendance', 'feedback'];
 
-  async function handleUpdate(values: StudentFormValues) {
+  async function handleUpdate(values: StudentFormValues, enrollmentChanges: EnrollmentGroupChange[] = []) {
+    for (const change of enrollmentChanges) {
+      const updateData: Record<string, unknown> = {};
+      if (change.groupId) updateData.groupId = change.groupId;
+      if (change.agreedMonthlyPrice !== undefined && change.agreedMonthlyPrice !== '') {
+        updateData.agreedMonthlyPrice = parseFloat(change.agreedMonthlyPrice);
+      }
+      if (Object.keys(updateData).length > 0) {
+        await updateEnrollment(change.id, updateData);
+      }
+    }
     await updateStudent(params.id, toStudentRequest(values));
     setEditOpen(false);
     await load();
@@ -228,12 +331,30 @@ export function StudentProfileContent() {
       ) : null}
 
       {tab === 'enrollments' ? (
-        <ListPanel
-          empty="No enrollments"
-          items={profile.enrollments.map(
-            (e) => `${e.courseName} · ${e.groupName}${e.instructorName ? ` · ${e.instructorName}` : ''} (${e.status})`,
-          )}
-        />
+        profile.enrollments.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No enrollments</div>
+        ) : (
+          <div className="space-y-2">
+            {profile.enrollments.map((e) => (
+              <div key={e.id} className="flex items-center justify-between gap-4 rounded-xl border bg-card px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{e.courseName}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {e.groupName}{e.instructorName ? ` · ${e.instructorName}` : ''} · €{Number(e.agreedMonthlyPrice).toFixed(2)}/mo
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant={e.status === 'ACTIVE' ? 'default' : 'secondary'}>{e.status}</Badge>
+                  {canManageEnrollments ? (
+                    <Button variant="outline" size="sm" onClick={() => setEditingEnrollmentId(e.id)}>
+                      Edit
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : null}
 
       {tab === 'attendance' ? (
@@ -273,10 +394,33 @@ export function StudentProfileContent() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogHeader>
           <DialogTitle>Edit student</DialogTitle>
-          <DialogDescription>Update student details and guardians.</DialogDescription>
+          <DialogDescription>
+            {canManageEnrollments
+              ? 'Update student details, courses, and guardians.'
+              : 'Update student details and guardians.'}
+          </DialogDescription>
         </DialogHeader>
         <StudentForm
           instructors={instructors}
+          enrollments={
+            canManageEnrollments
+              ? profile.enrollments
+                  .filter((enrollment) => enrollment.status === 'ACTIVE' || enrollment.status === 'PENDING')
+                  .map((enrollment) => ({
+                    id: enrollment.id,
+                    courseId: enrollment.courseId,
+                    courseName: enrollment.courseName,
+                    groupId: enrollment.groupId,
+                    groupName: enrollment.groupName,
+                    instructorName: enrollment.instructorName,
+                    status: enrollment.status,
+                    agreedMonthlyPrice: enrollment.agreedMonthlyPrice,
+                  }))
+              : undefined
+          }
+          groups={groups}
+          groupsLoading={groupsLoading}
+          groupsError={groupsError}
           defaultValues={{
             firstName: student.firstName,
             lastName: student.lastName,
@@ -316,6 +460,68 @@ export function StudentProfileContent() {
             Cancel
           </Button>
           <Button onClick={() => void handleArchive()}>Confirm archive</Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={editingEnrollmentId !== null} onOpenChange={(open) => { if (!open) setEditingEnrollmentId(null); }}>
+        <DialogHeader>
+          <DialogTitle>Edit enrollment</DialogTitle>
+          <DialogDescription>
+            Move the student to a different group or update their monthly price.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 px-6 py-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Course</label>
+            <Select
+              value={enrollEditCourseId}
+              onChange={(e) => {
+                setEnrollEditCourseId(e.target.value);
+                setEnrollEditGroupId('');
+              }}
+            >
+              <option value="">Select course…</option>
+              {enrollEditCourses.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Group</label>
+            <Select
+              value={enrollEditGroupId}
+              onChange={(e) => setEnrollEditGroupId(e.target.value)}
+              disabled={!enrollEditCourseId}
+            >
+              <option value="">Select group…</option>
+              {enrollEditGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}{g.instructorName ? ` · ${g.instructorName}` : ''}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Monthly price (€)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              className="flex h-9 w-full rounded-lg border border-input bg-card px-3 py-1 text-sm outline-none transition focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring/20"
+              value={enrollEditPrice}
+              onChange={(e) => setEnrollEditPrice(e.target.value)}
+            />
+          </div>
+          {enrollEditError ? <p className="text-sm text-red-500">{enrollEditError}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingEnrollmentId(null)} disabled={enrollEditSaving}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleEnrollmentSave()} disabled={enrollEditSaving || !enrollEditGroupId}>
+            {enrollEditSaving ? 'Saving…' : 'Save'}
+          </Button>
         </DialogFooter>
       </Dialog>
     </div>

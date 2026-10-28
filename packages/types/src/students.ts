@@ -63,6 +63,7 @@ export interface StudentEnrollmentSummary {
   status: string;
   startDate: string;
   endDate: string | null;
+  agreedMonthlyPrice: string;
 }
 
 export interface StudentAttendanceSummary {

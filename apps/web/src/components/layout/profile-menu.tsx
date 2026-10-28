@@ -32,18 +32,18 @@ export function ProfileMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 rounded-full border border-slate-100 bg-slate-50 py-1 pl-1 pr-2 transition hover:bg-white hover:shadow-sm"
+          className="flex items-center gap-2 rounded-lg border border-border bg-muted px-2 py-1 transition hover:bg-card hover:shadow-sm"
         >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-[#046bd2] text-xs font-semibold text-white">{initials}</AvatarFallback>
+          <Avatar className="h-7 w-7">
+            <AvatarFallback className="bg-[#03FE94] text-[11px] font-semibold text-[#020D23]">{initials}</AvatarFallback>
           </Avatar>
           <span className="hidden text-left sm:block">
-            <span className="block max-w-[120px] truncate text-sm font-medium leading-tight text-[#020D23]">
+            <span className="block max-w-[120px] truncate text-sm font-medium leading-tight text-foreground">
               {user.firstName} {user.lastName}
             </span>
-            <span className="block text-[11px] leading-tight text-slate-400">{role}</span>
+            <span className="block text-[11px] leading-tight text-muted-foreground">{role}</span>
           </span>
-          <ChevronDown className="h-4 w-4 text-slate-400" />
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 rounded-2xl">

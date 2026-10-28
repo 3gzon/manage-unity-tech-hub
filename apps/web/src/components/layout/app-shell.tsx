@@ -38,17 +38,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-start gap-4">
           <AppSidebar sections={sections} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
           <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <header className="flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-[0_10px_30px_rgb(15_23_42/0.06)] md:px-5">
+            <header className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm md:px-5">
               <div className="flex min-w-0 items-center gap-3">
                 <MobileNav sections={sections} />
                 <div className="min-w-0">
-                  <h1 className="truncate text-xl font-bold tracking-tight text-[#020D23] md:text-2xl">{title}</h1>
-                  <p className="text-xs text-slate-400">{user?.branch?.name ?? 'Unity Tech Hub'}</p>
+                  <h1 className="truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">{title}</h1>
+                  <p className="text-xs text-muted-foreground">{user?.branch?.name ?? 'Unity Tech Hub'}</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <div className="relative hidden min-w-[220px] md:block lg:w-80">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <div className="relative hidden min-w-[200px] md:block lg:w-72">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     value={query}
                     onChange={(event) => {
@@ -57,13 +57,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     }}
                     onFocus={() => setSearchOpen(true)}
                     onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
-                    placeholder="Search pages..."
-                    className="h-10 w-full rounded-full border border-slate-100 bg-slate-50 pl-9 pr-3 text-sm outline-none transition focus:border-[#046bd2]/40 focus:bg-white focus:ring-2 focus:ring-[#046bd2]/15"
+                    placeholder="Search pages…"
+                    className="h-9 w-full rounded-lg border border-input bg-muted pl-9 pr-3 text-sm outline-none transition focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/15"
                   />
                   {searchOpen && query.trim() ? (
-                    <div className="absolute right-0 top-12 z-30 w-full overflow-hidden rounded-2xl border border-slate-100 bg-white py-1 shadow-xl">
+                    <div className="absolute right-0 top-11 z-30 w-full overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg">
                       {matches.length === 0 ? (
-                        <p className="px-3 py-2 text-sm text-slate-400">No matching page</p>
+                        <p className="px-3 py-2 text-sm text-muted-foreground">No matching page</p>
                       ) : (
                         matches.map((item) => {
                           const Icon = item.icon;
@@ -72,9 +72,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               key={item.href}
                               type="button"
                               onMouseDown={() => openPage(item.href)}
-                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                             >
-                              <Icon className="h-4 w-4 text-[#046bd2]" />
+                              <Icon className="h-4 w-4 text-primary" />
                               {item.title}
                             </button>
                           );
@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
                 {user && user.branches.length > 1 ? (
                   <label className="hidden items-center gap-2 sm:flex">
-                    <span className="text-xs font-medium text-slate-400">Branch</span>
+                    <span className="text-xs font-medium text-muted-foreground">Branch</span>
                     <select
                       aria-label="Branch"
                       value={user.branch?.id ?? ''}
@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         setStoredBranchId(event.target.value);
                         window.location.reload();
                       }}
-                      className="h-10 rounded-full border border-slate-100 bg-slate-50 px-3 text-sm font-medium text-[#020D23] outline-none focus:border-[#046bd2]/40 focus:ring-2 focus:ring-[#046bd2]/15"
+                      className="h-9 rounded-lg border border-input bg-muted px-3 text-sm font-medium text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
                     >
                       {user.branches.map((branch) => (
                         <option key={branch.id} value={branch.id}>
