@@ -50,6 +50,7 @@ export function InstructorsPageContent() {
   const [editing, setEditing] = useState<InstructorListItem | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<InstructorListItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -93,6 +94,7 @@ export function InstructorsPageContent() {
 
   async function handleSave() {
     setFormError(null);
+    setSaving(true);
     const payload = {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
@@ -119,7 +121,6 @@ export function InstructorsPageContent() {
         message.toLowerCase().includes('email') ||
         message.toLowerCase().includes('could not be sent');
       if (!editing && isEmailError) {
-        // Instructor was created but confirmation email failed — close modal and warn
         setNotice(`Instructor created, but the confirmation email could not be sent. Configure SMTP to enable emails.`);
         setFormOpen(false);
         setEditing(null);
@@ -127,6 +128,8 @@ export function InstructorsPageContent() {
       } else {
         setFormError(message);
       }
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -317,14 +320,14 @@ export function InstructorsPageContent() {
           {formError ? <p className="text-sm text-red-600 md:col-span-2">{formError}</p> : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setFormOpen(false)}>
+          <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>
             Cancel
           </Button>
           <Button
             onClick={() => void handleSave()}
-            disabled={!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()}
+            disabled={saving || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim()}
           >
-            {editing ? 'Save changes' : 'Create instructor'}
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Create instructor'}
           </Button>
         </DialogFooter>
       </Dialog>
