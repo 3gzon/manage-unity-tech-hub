@@ -6,3 +6,14 @@ publish = ".next"
 NODE_VERSION = "22"
 NPM_CONFIG_PRODUCTION = "false"
 
+[[redirects]]
+  from = "/_next/static/*"
+  to = "/static/:splat"
+  status = 200
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"
+
+[[plugins]]
+package = "./netlify-plugin-patch-handler"
+
