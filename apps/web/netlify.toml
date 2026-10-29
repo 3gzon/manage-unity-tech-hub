@@ -1,19 +1,10 @@
 [build]
 command = "pnpm install --frozen-lockfile && pnpm --filter @unity/types build && pnpm --filter web build"
-publish = ".next"
+publish = "apps/web/.next"
 
 [build.environment]
 NODE_VERSION = "22"
 NPM_CONFIG_PRODUCTION = "false"
 
-[[redirects]]
-  from = "/_next/static/*"
-  to = "/static/:splat"
-  status = 200
-
 [[plugins]]
 package = "@netlify/plugin-nextjs"
-
-[[plugins]]
-package = "./netlify-plugin-patch-handler"
-
