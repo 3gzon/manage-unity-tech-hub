@@ -106,13 +106,27 @@ export function InstructorsPageContent() {
         setNotice(null);
       } else {
         await createInstructor(payload);
-        setNotice(`Confirmation email sent to ${payload.email}. They choose a password from that email.`);
+        setNotice(`Instructor created. A confirmation email will be sent to ${payload.email} once email is configured.`);
       }
       setFormOpen(false);
       setEditing(null);
       await load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not save instructor');
+      const message = err instanceof Error ? err.message : 'Could not save instructor';
+      const isEmailError =
+        message.toLowerCase().includes('smtp') ||
+        message.toLowerCase().includes('not configured') ||
+        message.toLowerCase().includes('email') ||
+        message.toLowerCase().includes('could not be sent');
+      if (!editing && isEmailError) {
+        // Instructor was created but confirmation email failed — close modal and warn
+        setNotice(`Instructor created, but the confirmation email could not be sent. Configure SMTP to enable emails.`);
+        setFormOpen(false);
+        setEditing(null);
+        await load();
+      } else {
+        setFormError(message);
+      }
     }
   }
 
@@ -154,7 +168,17 @@ export function InstructorsPageContent() {
         ) : null}
       </div>
 
-      {notice ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">{notice}</p> : null}
+      {notice ? (
+        <p
+          className={`rounded-md border px-3 py-2 text-sm ${
+            notice.toLowerCase().includes('could not') || notice.toLowerCase().includes('configure smtp')
+              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+          }`}
+        >
+          {notice}
+        </p>
+      ) : null}
 
       <div className="grid gap-3 rounded-xl border p-4 md:grid-cols-2">
         <Input

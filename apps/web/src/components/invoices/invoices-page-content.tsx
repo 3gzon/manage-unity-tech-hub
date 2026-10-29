@@ -8,6 +8,7 @@ import { archiveInvoice, createInvoice, fetchInvoices, sendInvoiceEmail } from '
 import { fetchStudent, fetchStudents } from '@/lib/students-api';
 import { isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorState, EmptyState } from '@/components/dashboard/dashboard-states';
@@ -24,6 +25,23 @@ function todayInput() {
 function displayDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+}
+
+function statusLabel(status: InvoiceListItem['status']) {
+  switch (status) {
+    case 'PAID': return 'Paid';
+    case 'UNPAID': return 'Unpaid';
+    case 'PARTIALLY_PAID': return 'Partial';
+    case 'OVERDUE': return 'Overdue';
+    case 'CANCELLED': return 'Cancelled';
+    default: return status;
+  }
+}
+
+function statusVariant(status: InvoiceListItem['status']): 'default' | 'outline' | 'secondary' {
+  if (status === 'PAID') return 'default';
+  if (status === 'OVERDUE') return 'secondary';
+  return 'outline';
 }
 
 function emptyInvoice() {
@@ -269,7 +287,9 @@ export function InvoicesPageContent() {
                 <th className="px-4 py-3 font-medium">Invoice</th>
                 <th className="px-4 py-3 font-medium">Student</th>
                 <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Total</th>
+                <th className="px-4 py-3 font-medium">Remaining</th>
+                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -280,6 +300,12 @@ export function InvoicesPageContent() {
                   <td className="px-4 py-3">{invoice.studentName}</td>
                   <td className="px-4 py-3">{invoice.billingPeriod}</td>
                   <td className="px-4 py-3">EUR {invoice.amount}</td>
+                  <td className="px-4 py-3">
+                    {Number(invoice.remaining) > 0 ? `EUR ${invoice.remaining}` : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={statusVariant(invoice.status)}>{statusLabel(invoice.status)}</Badge>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Link href={`/invoices/${invoice.id}`}>

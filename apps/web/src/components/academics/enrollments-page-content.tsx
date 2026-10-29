@@ -51,7 +51,11 @@ export function EnrollmentsPageContent() {
   const canManage = hasPermission(user, 'enrollments.manage');
 
   const [enrolled, setEnrolled] = useState<EnrollmentListItem[]>([]);
+  const [enrolledMeta, setEnrolledMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [enrolledPage, setEnrolledPage] = useState(1);
   const [pending, setPending] = useState<EnrollmentListItem[]>([]);
+  const [pendingMeta, setPendingMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [pendingPage, setPendingPage] = useState(1);
   const [groups, setGroups] = useState<
     Array<{ id: string; name: string; courseName: string; defaultPrice: string }>
   >([]);
@@ -80,17 +84,19 @@ export function EnrollmentsPageContent() {
     setError(null);
     try {
       const [activeResult, pendingResult] = await Promise.all([
-        fetchEnrollments({ page: 1, pageSize: 100, status: 'ACTIVE' }),
-        fetchEnrollments({ page: 1, pageSize: 100, status: 'PENDING' }),
+        fetchEnrollments({ page: enrolledPage, pageSize: 20, status: 'ACTIVE' }),
+        fetchEnrollments({ page: pendingPage, pageSize: 20, status: 'PENDING' }),
       ]);
       setEnrolled(activeResult.data);
+      setEnrolledMeta(activeResult.meta);
       setPending(pendingResult.data);
+      setPendingMeta(pendingResult.meta);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load enrollments');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enrolledPage, pendingPage]);
 
   useEffect(() => {
     void load();
@@ -341,6 +347,31 @@ export function EnrollmentsPageContent() {
                 </table>
               </div>
             )}
+            {pendingMeta.totalPages > 1 ? (
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Page {pendingMeta.page} of {pendingMeta.totalPages} · {pendingMeta.total} pending
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingPage <= 1}
+                    onClick={() => setPendingPage((p) => p - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingPage >= pendingMeta.totalPages}
+                    onClick={() => setPendingPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-3">
@@ -408,6 +439,31 @@ export function EnrollmentsPageContent() {
                 </table>
               </div>
             )}
+            {enrolledMeta.totalPages > 1 ? (
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-sm text-muted-foreground">
+                  Page {enrolledMeta.page} of {enrolledMeta.totalPages} · {enrolledMeta.total} enrolled
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={enrolledPage <= 1}
+                    onClick={() => setEnrolledPage((p) => p - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={enrolledPage >= enrolledMeta.totalPages}
+                    onClick={() => setEnrolledPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </section>
         </>
       )}
