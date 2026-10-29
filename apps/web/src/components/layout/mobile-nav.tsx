@@ -8,6 +8,7 @@ import type { NavSection } from '@/lib/navigation';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
+import { LogoMark } from '@/components/layout/logo';
 
 interface MobileNavProps {
   sections: NavSection[];
@@ -26,11 +27,11 @@ export function MobileNav({ sections }: MobileNavProps) {
       </SheetTrigger>
       <SheetContent className="bg-white text-[#020D23] md:hidden">
         <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#046bd2] text-sm font-bold text-white">
-            U
-          </div>
+          <LogoMark className="h-9 w-9 shrink-0" />
           <div>
-            <p className="text-sm font-bold">Unity Tech Hub</p>
+            <p className="text-sm font-semibold text-[#020D23]">
+              Unity Tech <span className="font-black text-[#03FE94]">HUB</span>
+            </p>
             <p className="text-xs text-slate-400">Management</p>
           </div>
         </div>
@@ -52,7 +53,7 @@ export function MobileNav({ sections }: MobileNavProps) {
                     onClick={() => setOpen(false)}
                     className={cn(
                       'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-slate-500 hover:bg-slate-50 hover:text-[#020D23]',
-                      active && 'bg-[#046bd2] font-medium text-white shadow-md shadow-[#046bd2]/25',
+                      active && 'bg-[#03FE94] font-medium text-white shadow-md shadow-[#03FE94]/25',
                     )}
                   >
                     <Icon className="h-4 w-4" />

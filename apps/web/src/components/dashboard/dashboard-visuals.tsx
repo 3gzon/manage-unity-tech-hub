@@ -29,7 +29,7 @@ export function VerticalBars({
             <span
               className={cn(
                 'w-full max-w-9 origin-bottom rounded-t-2xl transition-all duration-500',
-                active ? 'bg-[#046bd2] group-hover:bg-[#0357ab]' : 'bg-[#046bd2]/25',
+                active ? 'bg-[#03FE94] group-hover:bg-[#02cb78]' : 'bg-[#03FE94]/25',
               )}
               style={{
                 height: `${Math.max(item.value === 0 ? 8 : 14, (item.value / max) * 128)}px`,
@@ -74,7 +74,7 @@ export function ShareBars({
   );
 }
 
-export function FlowLine({ values, stroke = '#046bd2' }: { values: number[]; stroke?: string }) {
+export function FlowLine({ values, stroke = '#03FE94' }: { values: number[]; stroke?: string }) {
   const gradientId = useId().replace(/:/g, '');
   if (values.length < 2) {
     return <p className="py-8 text-center text-sm text-slate-400">Not enough points for a trend yet.</p>;

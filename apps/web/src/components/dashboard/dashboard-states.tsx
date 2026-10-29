@@ -8,7 +8,7 @@ const TONES = {
   sand: { card: 'bg-[#fff4d6]', icon: 'bg-white text-[#b45309]' },
   mint: { card: 'bg-[#e5f8ee]', icon: 'bg-white text-[#047857]' },
   lilac: { card: 'bg-[#eee7ff]', icon: 'bg-white text-[#6d28d9]' },
-  sky: { card: 'bg-[#e7f1ff]', icon: 'bg-white text-[#046bd2]' },
+  sky: { card: 'bg-[#e6fff5]', icon: 'bg-white text-[#020D23]' },
   peach: { card: 'bg-[#ffe8dc]', icon: 'bg-white text-[#c2410c]' },
 } as const;
 

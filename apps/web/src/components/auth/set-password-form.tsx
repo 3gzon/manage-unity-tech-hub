@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { LogoMark } from '@/components/layout/logo';
 
 export function SetPasswordForm({
   title,
@@ -51,16 +52,16 @@ export function SetPasswordForm({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-[#046bd2] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-[#03FE94] px-4 py-2.5 text-sm font-semibold text-[#020D23] transition hover:bg-[#03FE94]/90 disabled:opacity-60"
           >
-            {submitting ? 'Saving...' : submitLabel}
+            {submitting ? 'Saving…' : submitLabel}
           </button>
         </form>
       ) : (
         <p className="mt-6 text-sm text-red-600">This link is missing a token. Open the link from the email again.</p>
       )}
       <p className="mt-6 text-sm">
-        <Link href="/login" className="text-[#046bd2] hover:underline">
+        <Link href="/login" className="font-medium text-[#020D23] hover:underline">
           Back to sign in
         </Link>
       </p>
@@ -79,13 +80,20 @@ export function AuthCard({
 }) {
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#020D23] p-6">
-      <div className="pointer-events-none absolute -left-16 top-8 h-72 w-72 rounded-full bg-[#046bd2]/50 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-[#00FF88]/25 blur-3xl" />
+      <div className="pointer-events-none absolute -left-32 -top-16 h-96 w-96 rounded-full bg-[#03FE94]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-16 right-0 h-96 w-96 rounded-full bg-[#03FE94]/8 blur-3xl" />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="h-1.5 w-20 rounded-full bg-gradient-to-r from-[#046bd2] via-[#00FF88] to-[#F50057]" />
-        <p className="mt-5 text-sm font-medium text-[#046bd2]">Unity Tech Hub</p>
-        <h1 className="mt-2 text-2xl font-bold text-[#020D23]">{title}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+        <div className="flex items-center gap-3">
+          <LogoMark className="h-9 w-9 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-[#020D23]">
+              Unity Tech <span className="font-black text-[#03FE94]">HUB</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground">Management Platform</p>
+          </div>
+        </div>
+        <h1 className="mt-6 text-2xl font-bold text-[#020D23]">{title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         {children}
       </div>
     </main>

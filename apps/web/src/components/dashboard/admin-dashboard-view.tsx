@@ -9,7 +9,7 @@ import { FlowLine, ShareBars, VerticalBars, weekdayCounts, weekdayLabel } from '
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
-const BAR_COLORS = ['#046bd2', '#00b86b', '#F50057', '#7c3aed', '#f59e0b', '#0ea5e9'];
+const BAR_COLORS = ['#03FE94', '#00b86b', '#F50057', '#7c3aed', '#f59e0b', '#0ea5e9'];
 
 export function AdminDashboardView() {
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
@@ -132,7 +132,7 @@ export function AdminDashboardView() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-[#e7f1ff] p-3">
                 <p className="flex items-center gap-1 text-xs text-slate-500">
-                  <TrendingUp className="h-3.5 w-3.5 text-[#046bd2]" /> This month
+                  <TrendingUp className="h-3.5 w-3.5 text-[#03FE94]" /> This month
                 </p>
                 <p className="mt-1 text-lg font-bold text-[#020D23]">€{metrics.revenueThisMonth}</p>
               </div>
@@ -164,7 +164,7 @@ export function AdminDashboardView() {
                   meta: `${payment.paymentDate} · ${payment.method}`,
                   value: Number(payment.amount) || 0,
                   display: `€${payment.amount}`,
-                  color: BAR_COLORS[index % BAR_COLORS.length] ?? '#046bd2',
+                  color: BAR_COLORS[index % BAR_COLORS.length] ?? '#03FE94',
                 }))}
               />
             )}

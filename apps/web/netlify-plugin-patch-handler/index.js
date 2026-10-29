@@ -71,27 +71,67 @@ module.exports = {
 
     const copied = [];
 
-    // 1. Copy functions manifest (CLI reads: {site.root}/{packagePath}/.netlify/functions/manifest.json
-    //    site.root = CWD/.., packagePath = apps/web → same as CWD/.netlify/functions/manifest.json)
-    const strayManifest = path.join(strayNetlifyDir, 'functions', 'manifest.json');
-    if (fs.existsSync(strayManifest)) {
-      const targetManifestDir = path.join(nonStrayNetlifyDir, 'functions');
-      const targetManifest = path.join(targetManifestDir, 'manifest.json');
-      if (path.resolve(strayManifest) !== path.resolve(targetManifest)) {
-        fs.mkdirSync(targetManifestDir, { recursive: true });
-        fs.copyFileSync(strayManifest, targetManifest);
-        copied.push('functions/manifest.json');
+    const cwd = process.cwd();
+    const strayAbsolute = path.resolve(strayNetlifyDir);
+    const nonStrayAbsolute = path.resolve(nonStrayNetlifyDir);
+
+    // 1. Copy functions/ (Lambda ZIP + manifest) and rewrite stray absolute paths in the manifest
+    const strayFunctionsDir = path.join(strayNetlifyDir, 'functions');
+    if (fs.existsSync(strayFunctionsDir)) {
+      const targetFunctionsDir = path.join(nonStrayNetlifyDir, 'functions');
+      if (path.resolve(strayFunctionsDir) !== path.resolve(targetFunctionsDir)) {
+        copyDirSync(strayFunctionsDir, targetFunctionsDir);
+        // Rewrite manifest so path/mainFile point to non-stray locations
+        const targetManifest = path.join(targetFunctionsDir, 'manifest.json');
+        if (fs.existsSync(targetManifest)) {
+          const manifest = JSON.parse(fs.readFileSync(targetManifest, 'utf8'));
+          for (const fn of manifest.functions || []) {
+            if (fn.path) fn.path = fn.path.replace(strayAbsolute, nonStrayAbsolute);
+            if (fn.mainFile) fn.mainFile = fn.mainFile.replace(strayAbsolute, nonStrayAbsolute);
+          }
+          fs.writeFileSync(targetManifest, JSON.stringify(manifest));
+        }
+        copied.push('functions/');
       }
     }
 
-    // 2. Copy edge-functions-dist directory (CLI reads: {workingDir}/.netlify/edge-functions-dist
-    //    workingDir = CWD → CWD/.netlify/edge-functions-dist)
+    // 2. Copy edge-functions-dist directory
     const strayEdgeDist = path.join(strayNetlifyDir, 'edge-functions-dist');
     if (fs.existsSync(strayEdgeDist)) {
       const targetEdgeDist = path.join(nonStrayNetlifyDir, 'edge-functions-dist');
       if (path.resolve(strayEdgeDist) !== path.resolve(targetEdgeDist)) {
         copyDirSync(strayEdgeDist, targetEdgeDist);
         copied.push('edge-functions-dist/');
+      }
+    }
+
+    // 3. Copy deploy/v1/blobs (pre-rendered page blobs — must match current build's BUILD_ID)
+    const strayDeploy = path.join(strayNetlifyDir, 'deploy');
+    if (fs.existsSync(strayDeploy)) {
+      const targetDeploy = path.join(nonStrayNetlifyDir, 'deploy');
+      if (path.resolve(strayDeploy) !== path.resolve(targetDeploy)) {
+        copyDirSync(strayDeploy, targetDeploy);
+        copied.push('deploy/');
+      }
+    }
+
+    // 4. Copy functions-internal/ (Lambda source for bundling)
+    const strayFunctionsInternal = path.join(strayNetlifyDir, 'functions-internal');
+    if (fs.existsSync(strayFunctionsInternal)) {
+      const targetFunctionsInternal = path.join(nonStrayNetlifyDir, 'functions-internal');
+      if (path.resolve(strayFunctionsInternal) !== path.resolve(targetFunctionsInternal)) {
+        copyDirSync(strayFunctionsInternal, targetFunctionsInternal);
+        copied.push('functions-internal/');
+      }
+    }
+
+    // 6. Copy static/ (static assets at correct /_next/... paths)
+    const strayStatic = path.join(strayNetlifyDir, 'static');
+    if (fs.existsSync(strayStatic)) {
+      const targetStatic = path.join(nonStrayNetlifyDir, 'static');
+      if (path.resolve(strayStatic) !== path.resolve(targetStatic)) {
+        copyDirSync(strayStatic, targetStatic);
+        copied.push('static/');
       }
     }
 

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { NavSection } from '@/lib/navigation';
+import { LogoMark } from '@/components/layout/logo';
 
 interface AppSidebarProps {
   sections: NavSection[];
@@ -23,12 +24,14 @@ export function AppSidebar({ sections, collapsed, onToggle }: AppSidebarProps) {
       )}
     >
       <div className={cn('flex items-center gap-3 px-2 py-3', collapsed && 'justify-center px-0')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#03FE94] text-sm font-bold text-[#020D23]">
-          U
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center">
+          <LogoMark className="h-8 w-8" />
         </div>
         {!collapsed ? (
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Unity Tech Hub</p>
+            <p className="truncate text-sm font-semibold text-white">
+              Unity Tech <span className="font-black text-[#03FE94]">HUB</span>
+            </p>
             <p className="text-[11px] text-white/40">Management</p>
           </div>
         ) : null}

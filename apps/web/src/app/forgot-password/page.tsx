@@ -52,14 +52,14 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-[#046bd2] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-[#03FE94] px-4 py-2.5 text-sm font-semibold text-[#020D23] transition hover:bg-[#03FE94]/90 disabled:opacity-60"
           >
-            {submitting ? 'Sending...' : 'Send email'}
+            {submitting ? 'Sending…' : 'Send email'}
           </button>
         </form>
       )}
       <p className="mt-6 text-sm">
-        <Link href="/login" className="text-[#046bd2] hover:underline">
+        <Link href="/login" className="font-medium text-[#020D23] hover:underline">
           Back to sign in
         </Link>
       </p>

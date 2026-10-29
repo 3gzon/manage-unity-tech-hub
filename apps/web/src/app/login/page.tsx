@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
+import { LogoMark } from '@/components/layout/logo';
 
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
@@ -41,20 +42,27 @@ export default function LoginPage() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#020D23] p-6">
-      <div className="pointer-events-none absolute -left-16 top-8 h-72 w-72 rounded-full bg-[#046bd2]/50 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-[#00FF88]/25 blur-3xl" />
-      <div className="pointer-events-none absolute right-16 top-16 h-40 w-40 rounded-full bg-[#F50057]/25 blur-3xl" />
+      <div className="pointer-events-none absolute -left-32 -top-16 h-96 w-96 rounded-full bg-[#03FE94]/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-16 right-0 h-96 w-96 rounded-full bg-[#03FE94]/8 blur-3xl" />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="h-1.5 w-20 rounded-full bg-gradient-to-r from-[#046bd2] via-[#00FF88] to-[#F50057]" />
-        <p className="mt-5 text-sm font-medium text-[#046bd2]">Unity Tech Hub</p>
-        <h1 className="mt-2 text-2xl font-bold text-[#020D23]">Sign in</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Use your staff credentials to access the management platform.
+        <div className="flex items-center gap-3">
+          <LogoMark className="h-9 w-9 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-[#020D23]">
+              Unity Tech <span className="font-black text-[#03FE94]">HUB</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground">Management Platform</p>
+          </div>
+        </div>
+
+        <h1 className="mt-6 text-2xl font-bold text-[#020D23]">Sign in</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Use your staff credentials to access the internal dashboard.
         </p>
 
-        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+        <form className="mt-7 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-[#020D23]" htmlFor="email">
               Email
             </label>
             <input
@@ -64,12 +72,12 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+              className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm outline-none transition focus:border-[#03FE94]/60 focus:ring-2 focus:ring-[#03FE94]/20"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium" htmlFor="password">
+            <label className="mb-1 block text-sm font-medium text-[#020D23]" htmlFor="password">
               Password
             </label>
             <input
@@ -80,7 +88,7 @@ export default function LoginPage() {
               minLength={8}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+              className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm outline-none transition focus:border-[#03FE94]/60 focus:ring-2 focus:ring-[#03FE94]/20"
             />
           </div>
 
@@ -90,12 +98,12 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-[#046bd2] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="mt-2 w-full rounded-lg bg-[#03FE94] px-4 py-2.5 text-sm font-semibold text-[#020D23] transition hover:bg-[#03FE94]/90 disabled:opacity-60"
           >
-            {submitting ? 'Signing in...' : 'Sign in'}
+            {submitting ? 'Signing in…' : 'Sign in'}
           </button>
           <p className="text-center text-sm">
-            <a href="/forgot-password" className="text-[#046bd2] hover:underline">
+            <a href="/forgot-password" className="font-medium text-[#03FE94] hover:underline" style={{ color: '#020D23' }}>
               Forgot password?
             </a>
           </p>

@@ -74,7 +74,7 @@ export function InstructorAttendanceContent() {
                     onClick={() => setGroupId(group.id)}
                     className={
                       active
-                        ? 'rounded-full bg-[#046bd2] px-4 py-2 text-sm font-medium text-white'
+                        ? 'rounded-full bg-[#03FE94] px-4 py-2 text-sm font-medium text-white'
                         : 'rounded-full bg-white px-4 py-2 text-sm font-medium text-[#020D23] shadow-sm hover:bg-[#e7f1ff]'
                     }
                   >

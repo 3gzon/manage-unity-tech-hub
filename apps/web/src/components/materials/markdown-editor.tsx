@@ -69,7 +69,7 @@ export function MarkdownEditor({
             key={action.label}
             type="button"
             onClick={() => apply(action)}
-            className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white hover:text-[#046bd2]"
+            className="rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white hover:text-[#03FE94]"
           >
             {action.label}
           </button>
@@ -77,7 +77,7 @@ export function MarkdownEditor({
         <button
           type="button"
           onClick={() => fileInput.current?.click()}
-          className="ml-auto rounded-md px-2 py-1 text-xs font-medium text-[#046bd2] hover:bg-white"
+          className="ml-auto rounded-md px-2 py-1 text-xs font-medium text-[#03FE94] hover:bg-white"
         >
           Import .md
         </button>

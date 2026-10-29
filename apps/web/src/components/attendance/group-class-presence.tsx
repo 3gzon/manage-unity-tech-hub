@@ -397,13 +397,13 @@ function AttendanceCell({
             aria-label={`Comment for ${label}`}
             onClick={(event) => onComment(event.currentTarget.getBoundingClientRect())}
             className={`absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm transition ${
-              hasNote ? 'opacity-100 text-[#046bd2]' : 'opacity-0 group-hover:opacity-100'
+              hasNote ? 'opacity-100 text-[#03FE94]' : 'opacity-0 group-hover:opacity-100'
             }`}
           >
             <MessageSquare className="h-3 w-3" />
           </button>
         ) : hasNote ? (
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#046bd2]" />
+          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#03FE94]" />
         ) : null}
       </div>
     </td>
@@ -439,7 +439,7 @@ function CommentPopup({
           onChange={(event) => onChange(event.target.value)}
           placeholder="Add a comment"
           rows={3}
-          className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#046bd2]/40 focus:ring-2 focus:ring-[#046bd2]/15"
+          className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#03FE94]/40 focus:ring-2 focus:ring-[#03FE94]/15"
         />
         <div className="mt-3 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel}>

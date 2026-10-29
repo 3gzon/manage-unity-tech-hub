@@ -71,8 +71,8 @@ export function MonthCalendar({ month, onMonthChange, selected, marked = [], cou
               onClick={() => onSelect(date)}
               className={cn(
                 'flex h-12 flex-col items-center justify-center rounded-xl text-sm',
-                isSelected ? 'bg-[#046bd2] text-white' : 'hover:bg-slate-50',
-                date === today && !isSelected && 'ring-1 ring-[#046bd2]',
+                isSelected ? 'bg-[#03FE94] text-white' : 'hover:bg-slate-50',
+                date === today && !isSelected && 'ring-1 ring-[#03FE94]',
               )}
             >
               {day}
@@ -80,13 +80,13 @@ export function MonthCalendar({ month, onMonthChange, selected, marked = [], cou
                 <span
                   className={cn(
                     'mt-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4',
-                    isSelected ? 'bg-white/25 text-white' : 'bg-[#046bd2]/10 text-[#046bd2]',
+                    isSelected ? 'bg-white/25 text-white' : 'bg-[#03FE94]/10 text-[#03FE94]',
                   )}
                 >
                   {count}
                 </span>
               ) : count === 1 ? (
-                <span className={cn('mt-0.5 h-1.5 w-1.5 rounded-full', isSelected ? 'bg-[#00FF88]' : 'bg-[#046bd2]')} />
+                <span className={cn('mt-0.5 h-1.5 w-1.5 rounded-full', isSelected ? 'bg-[#00FF88]' : 'bg-[#03FE94]')} />
               ) : (
                 <span className="mt-0.5 h-1.5 w-1.5" />
               )}

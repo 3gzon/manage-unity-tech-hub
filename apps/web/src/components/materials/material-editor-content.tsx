@@ -90,7 +90,7 @@ export function MaterialEditorContent({ mode }: { mode: 'create' | 'edit' }) {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/materials" className="text-sm text-[#046bd2]">
+        <Link href="/materials" className="text-sm text-[#03FE94]">
           Course materials
         </Link>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">

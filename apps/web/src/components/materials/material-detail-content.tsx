@@ -96,7 +96,7 @@ export function MaterialDetailContent() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <Link href="/materials" className="text-sm text-[#046bd2]">
+          <Link href="/materials" className="text-sm text-[#03FE94]">
             Course materials
           </Link>
           <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-400">
