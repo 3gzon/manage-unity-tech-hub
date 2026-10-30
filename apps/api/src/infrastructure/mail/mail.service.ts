@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
 
 export interface AbsenceEmailInput {
@@ -64,7 +65,17 @@ export interface FeedbackPdfEmailInput {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private resend: Resend | null = null;
   private transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+
+  private getResend(): Resend | null {
+    const key = process.env.RESEND_API_KEY?.trim();
+    if (!key) return null;
+    if (!this.resend) {
+      this.resend = new Resend(key);
+    }
+    return this.resend;
+  }
 
   async sendAbsenceNotice(input: AbsenceEmailInput): Promise<AbsenceEmailResult> {
     const recipients = [...new Set(input.to.map((email) => email.trim().toLowerCase()).filter(Boolean))];
@@ -294,14 +305,69 @@ export class MailService {
     failureDetail: string,
     attachments?: Array<{ filename: string; content: Buffer; contentType: string }>,
   ): Promise<EmailSendResult> {
-    const host = process.env.SMTP_HOST?.trim();
     const from = process.env.MAIL_FROM?.trim();
+    if (!from) {
+      return { sentTo: [], detail: 'Email is not configured. Add MAIL_FROM.' };
+    }
+
+    const resend = this.getResend();
+    if (resend) {
+      return this.deliverViaResend(resend, from, recipients, subject, text, logLabel, attachments);
+    }
+    return this.deliverViaSmtp(from, recipients, subject, text, logLabel, failureDetail, attachments);
+  }
+
+  private async deliverViaResend(
+    resend: Resend,
+    from: string,
+    recipients: string[],
+    subject: string,
+    text: string,
+    logLabel: string,
+    attachments?: Array<{ filename: string; content: Buffer; contentType: string }>,
+  ): Promise<EmailSendResult> {
+    try {
+      const { error } = await resend.emails.send({
+        from,
+        to: recipients,
+        subject,
+        text,
+        attachments: attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
+      });
+
+      if (error) {
+        this.logger.warn(`${logLabel}: ${error.message}`);
+        return { sentTo: [], detail: `Email failed: ${error.message}` };
+      }
+
+      return { sentTo: recipients, detail: `Sent to ${recipients.join(', ')}` };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`${logLabel}: ${message}`);
+      return { sentTo: [], detail: `Email failed: ${message}` };
+    }
+  }
+
+  private async deliverViaSmtp(
+    from: string,
+    recipients: string[],
+    subject: string,
+    text: string,
+    logLabel: string,
+    failureDetail: string,
+    attachments?: Array<{ filename: string; content: Buffer; contentType: string }>,
+  ): Promise<EmailSendResult> {
+    const host = process.env.SMTP_HOST?.trim();
     const user = process.env.SMTP_USER?.trim();
     const pass = process.env.SMTP_PASS?.trim();
-    if (!host || !from || !user || !pass) {
+    if (!host || !user || !pass) {
       return {
         sentTo: [],
-        detail: 'Email is not configured. Add SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM.',
+        detail: 'Email is not configured. Add RESEND_API_KEY, or SMTP_HOST, SMTP_USER, and SMTP_PASS.',
       };
     }
 
