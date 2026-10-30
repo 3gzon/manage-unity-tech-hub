@@ -70,3 +70,16 @@ export function archiveInstructor(id: string) {
 export function resendFeedbackEmail(feedbackId: string, email: string) {
   return api.post<{ sentTo: string; detail: string }>(`feedback/${feedbackId}/email`, { email });
 }
+
+export function sendInstructorReportEmail(
+  instructorId: string,
+  fromDate: string,
+  toDate: string,
+  email: string,
+) {
+  return api.post<{ sentTo: string; detail: string }>(`instructors/${instructorId}/report/email`, {
+    fromDate,
+    toDate,
+    email,
+  });
+}

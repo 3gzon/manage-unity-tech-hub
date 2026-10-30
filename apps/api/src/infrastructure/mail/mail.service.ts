@@ -44,6 +44,13 @@ export interface ReportPdfEmailInput {
   pdf: Buffer;
 }
 
+export interface InstructorReportEmailInput {
+  to: string;
+  instructorName: string;
+  period: string;
+  pdf: Buffer;
+}
+
 export interface FeedbackPdfEmailInput {
   to: string;
   studentName: string;
@@ -209,6 +216,36 @@ export class MailService {
       [
         {
           filename: `Raport-financiar-${input.periodLabel.replace(/\s+/g, '-')}.pdf`,
+          content: input.pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    );
+  }
+
+  async sendInstructorReport(input: InstructorReportEmailInput): Promise<EmailSendResult> {
+    const recipient = input.to.trim().toLowerCase();
+    if (!recipient) {
+      return { sentTo: [], detail: 'Enter an email address.' };
+    }
+
+    const safeName = input.instructorName.replace(/[^\w.-]+/g, '-');
+    return this.deliver(
+      [recipient],
+      `Raport mujor — ${input.instructorName} — ${input.period}`,
+      [
+        'Përshëndetje,',
+        '',
+        `Bashkëngjitur është raporti mujor për instruktorin ${input.instructorName}.`,
+        `Periudha: ${input.period}`,
+        '',
+        'Unity Tech Hub',
+      ].join('\n'),
+      `Instructor report email failed for ${input.instructorName}`,
+      'The report could not be emailed. Check the address and try again.',
+      [
+        {
+          filename: `Raport-${safeName}.pdf`,
           content: input.pdf,
           contentType: 'application/pdf',
         },
