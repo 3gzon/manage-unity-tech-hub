@@ -326,7 +326,8 @@ export class MailService {
     } catch (error) {
       const message = error instanceof Error ? error.message : failureDetail;
       this.logger.warn(`${logLabel}: ${message}`);
-      return { sentTo: [], detail: failureDetail };
+      this.transporter = null;
+      return { sentTo: [], detail: `Email failed: ${message}` };
     }
   }
 }

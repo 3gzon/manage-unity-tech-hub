@@ -242,22 +242,21 @@ export class InstructorsService {
         await this.removeUnconfirmed(created.id, null, existingUser);
         throw new BadRequestException('Instructor account was not created');
       }
+
+      let emailWarning: string | null = null;
       try {
         await this.auth.sendConfirmation(created.userId);
       } catch (emailError) {
-        // If only the email delivery failed (e.g. SMTP not configured), keep the
-        // instructor in PENDING state — an admin can resend the invitation later.
-        // Roll back only for unexpected errors (database, token generation, etc.).
         const msg = emailError instanceof Error ? emailError.message : String(emailError);
-        if (msg.includes('SMTP') || msg.includes('not configured') || msg.includes('could not be sent')) {
-          this.logger.warn(`Instructor ${created.email} created but confirmation email not sent: ${msg}`);
-        } else {
-          await this.removeUnconfirmed(created.id, created.userId, existingUser);
-          throw emailError;
-        }
+        this.logger.warn(`Instructor ${created.email} created but confirmation email not sent: ${msg}`);
+        emailWarning = msg;
       }
 
-      return this.toDetail(created);
+      const detail = this.toDetail(created);
+      if (emailWarning) {
+        (detail as unknown as Record<string, unknown>).emailWarning = emailWarning;
+      }
+      return detail;
     } catch (error) {
       this.rethrowUniqueConflict(error);
       throw error;

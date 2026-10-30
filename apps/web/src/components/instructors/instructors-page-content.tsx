@@ -107,27 +107,19 @@ export function InstructorsPageContent() {
         await updateInstructor(editing.id, payload);
         setNotice(null);
       } else {
-        await createInstructor(payload);
-        setNotice(`Instructor created. A confirmation email will be sent to ${payload.email} once email is configured.`);
+        const result = await createInstructor(payload);
+        const warning = (result as unknown as Record<string, unknown>).emailWarning;
+        if (warning) {
+          setNotice(`Instructor created, but the confirmation email failed: ${warning}`);
+        } else {
+          setNotice(`Instructor created. A confirmation email was sent to ${payload.email}.`);
+        }
       }
       setFormOpen(false);
       setEditing(null);
       await load();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save instructor';
-      const isEmailError =
-        message.toLowerCase().includes('smtp') ||
-        message.toLowerCase().includes('not configured') ||
-        message.toLowerCase().includes('email') ||
-        message.toLowerCase().includes('could not be sent');
-      if (!editing && isEmailError) {
-        setNotice(`Instructor created, but the confirmation email could not be sent. Configure SMTP to enable emails.`);
-        setFormOpen(false);
-        setEditing(null);
-        await load();
-      } else {
-        setFormError(message);
-      }
+      setFormError(err instanceof Error ? err.message : 'Could not save instructor');
     } finally {
       setSaving(false);
     }
@@ -174,7 +166,7 @@ export function InstructorsPageContent() {
       {notice ? (
         <p
           className={`rounded-md border px-3 py-2 text-sm ${
-            notice.toLowerCase().includes('could not') || notice.toLowerCase().includes('configure smtp')
+            notice.toLowerCase().includes('could not') || notice.toLowerCase().includes('failed') || notice.toLowerCase().includes('configure smtp')
               ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200'
               : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
           }`}
