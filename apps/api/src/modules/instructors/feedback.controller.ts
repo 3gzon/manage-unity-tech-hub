@@ -1,8 +1,8 @@
-import { Controller, Get, Header, Param, Query, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, Post, Query, StreamableFile } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { ListFeedbackQueryDto } from './dto/feedback.dto';
+import { ListFeedbackQueryDto, ResendFeedbackEmailDto } from './dto/feedback.dto';
 import { FeedbackService } from './feedback.service';
 
 @Controller('feedback')
@@ -23,5 +23,10 @@ export class FeedbackController {
     return new StreamableFile(buffer, {
       disposition: `attachment; filename="Vleresim-${safeName}.pdf"`,
     });
+  }
+
+  @Post(':id/email')
+  resendEmail(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ResendFeedbackEmailDto) {
+    return this.feedback.resendEmail(user, id, dto.email);
   }
 }

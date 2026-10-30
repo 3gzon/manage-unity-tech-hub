@@ -6,7 +6,10 @@ import type {
 } from '@unity/types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
+import { MailService } from '../../infrastructure/mail/mail.service';
+import { SettingsService } from '../settings/settings.service';
 import type { FinancialReportQueryDto } from './dto/financial-report.dto';
+import { renderFinancialReportPdf } from './report-pdf';
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -30,7 +33,11 @@ const EXPENSE_LABELS: Record<string, string> = {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly settings: SettingsService,
+  ) {}
 
   async getFinancialReport(query: FinancialReportQueryDto): Promise<FinancialReportResponse> {
     const { preset, from, to } = this.resolvePeriod(query);
@@ -216,6 +223,22 @@ export class ReportsService {
         })),
       },
     };
+  }
+
+  async generatePdf(query: FinancialReportQueryDto) {
+    const report = await this.getFinancialReport(query);
+    const settings = await this.settings.get();
+    const pdf = await renderFinancialReportPdf(report, settings.schoolName);
+    return { pdf, periodLabel: `${report.fromDate} — ${report.toDate}` };
+  }
+
+  async sendReportEmail(query: FinancialReportQueryDto, email: string) {
+    const { pdf, periodLabel } = await this.generatePdf(query);
+    const result = await this.mail.sendReportPdf({ to: email, periodLabel, pdf });
+    if (result.sentTo.length === 0) {
+      throw new BadRequestException(result.detail);
+    }
+    return { sentTo: result.sentTo[0], detail: result.detail };
   }
 
   private resolvePeriod(query: FinancialReportQueryDto): {

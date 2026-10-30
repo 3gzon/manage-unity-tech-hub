@@ -160,6 +160,42 @@ export class FeedbackService {
     };
   }
 
+  async resendEmail(user: AuthenticatedUser, id: string, email: string) {
+    const feedback = await this.requireVisible(user, id);
+    const settings = await this.settings.get();
+    const buffer = await renderFeedbackPdf({
+      schoolName: settings.schoolName,
+      date: formatFeedbackDate(feedback.createdAt),
+      instructorName: personName(feedback.instructor),
+      studentName: personName(feedback.student),
+      courseName: feedback.group.course.name,
+      groupName: feedback.group.name,
+      period: feedback.period,
+      overall: asRating(feedback.overall),
+      participation: asRating(feedback.participation),
+      understanding: asRating(feedback.understanding),
+      practice: asRating(feedback.practice),
+      attendance: asRating(feedback.attendance),
+      strengths: feedback.strengths,
+      improvements: feedback.improvements,
+      nextSteps: feedback.nextSteps,
+    });
+
+    const result = await this.mail.sendFeedbackPdf({
+      to: email,
+      studentName: personName(feedback.student),
+      courseName: feedback.group.course.name,
+      groupName: feedback.group.name,
+      period: feedback.period,
+      instructorName: personName(feedback.instructor),
+      pdf: buffer,
+    });
+    if (result.sentTo.length === 0) {
+      throw new BadRequestException(result.detail);
+    }
+    return { sentTo: result.sentTo[0], detail: result.detail };
+  }
+
   async pdf(user: AuthenticatedUser, id: string) {
     const feedback = await this.requireVisible(user, id);
     const settings = await this.settings.get();

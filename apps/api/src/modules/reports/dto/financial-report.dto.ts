@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsOptional } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsOptional } from 'class-validator';
 
 export class FinancialReportQueryDto {
   @IsOptional()
@@ -12,4 +12,9 @@ export class FinancialReportQueryDto {
   @IsOptional()
   @IsDateString()
   toDate?: string;
+}
+
+export class SendReportEmailDto extends FinancialReportQueryDto {
+  @IsEmail()
+  email!: string;
 }

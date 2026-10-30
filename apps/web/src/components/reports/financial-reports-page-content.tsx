@@ -6,19 +6,23 @@ import {
   AlertTriangle,
   Banknote,
   CircleDollarSign,
+  Download,
   FileCheck2,
   FileWarning,
+  Mail,
   Scale,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import { fetchFinancialReport } from '@/lib/reports-api';
+import { fetchFinancialReport, sendFinancialReportEmail } from '@/lib/reports-api';
+import { getAccessToken } from '@/lib/auth/token-storage';
 import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState, ErrorState, MetricCard, MetricCardSkeleton, PanelSkeleton } from '@/components/dashboard/dashboard-states';
-import { Input } from '@/components/ui/input';
+import { Input, Label } from '@/components/ui/input';
 
 const PRESETS: Array<{ id: FinancialReportPreset; label: string }> = [
   { id: 'THIS_MONTH', label: 'This Month' },
@@ -43,6 +47,11 @@ export function FinancialReportsPageContent() {
   const [report, setReport] = useState<FinancialReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -76,6 +85,51 @@ export function FinancialReportsPageContent() {
       void load();
     }
   }, [load, preset]);
+
+  async function downloadPdf() {
+    setDownloading(true);
+    try {
+      const token = getAccessToken();
+      if (!token) return;
+      const params = new URLSearchParams();
+      params.set('preset', preset);
+      if (preset === 'CUSTOM' && fromDate) params.set('fromDate', fromDate);
+      if (preset === 'CUSTOM' && toDate) params.set('toDate', toDate);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/reports/financial/pdf?${params}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Raport-financiar-${report?.fromDate ?? 'report'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!emailAddress.trim()) return;
+    setEmailSending(true);
+    setEmailNotice(null);
+    try {
+      await sendFinancialReportEmail(
+        { preset, fromDate: preset === 'CUSTOM' ? fromDate : undefined, toDate: preset === 'CUSTOM' ? toDate : undefined },
+        emailAddress.trim(),
+      );
+      setEmailNotice(`Email sent to ${emailAddress.trim()}.`);
+    } catch (err) {
+      setEmailNotice(err instanceof Error ? err.message : 'Could not send email');
+    } finally {
+      setEmailSending(false);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -120,10 +174,49 @@ export function FinancialReportsPageContent() {
       </div>
 
       {report ? (
-        <p className="text-sm text-muted-foreground">
-          Period {report.fromDate} to {report.toDate}
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-muted-foreground">
+            Period {report.fromDate} to {report.toDate}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={downloading} onClick={() => void downloadPdf()}>
+              <Download className="mr-1.5 h-4 w-4" />
+              {downloading ? 'Downloading…' : 'Download PDF'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setEmailOpen(true); setEmailNotice(null); }}>
+              <Mail className="mr-1.5 h-4 w-4" />
+              Send Email
+            </Button>
+          </div>
+        </div>
       ) : null}
+
+      <Dialog open={emailOpen} onOpenChange={(open) => { if (!open) { setEmailOpen(false); setEmailNotice(null); setEmailAddress(''); } }}>
+        <DialogHeader>
+          <DialogTitle>Send financial report</DialogTitle>
+          <DialogDescription>
+            {report ? `Period ${report.fromDate} to ${report.toDate}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Label>Email address</Label>
+          <Input
+            type="email"
+            placeholder="recipient@example.com"
+            value={emailAddress}
+            onChange={(e) => { setEmailAddress(e.target.value); setEmailNotice(null); }}
+          />
+          {emailNotice ? (
+            <p className={`text-sm ${emailNotice.includes('sent') ? 'text-emerald-700' : 'text-red-600'}`}>{emailNotice}</p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEmailOpen(false)}>Cancel</Button>
+          <Button disabled={emailSending || !emailAddress.trim()} onClick={() => void handleSendEmail()}>
+            {emailSending ? 'Sending…' : 'Send'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       {loading ? (
         <div className="space-y-6">

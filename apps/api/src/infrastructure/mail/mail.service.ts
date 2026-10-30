@@ -38,6 +38,12 @@ export interface InvoicePdfEmailInput {
   pdf: Buffer;
 }
 
+export interface ReportPdfEmailInput {
+  to: string;
+  periodLabel: string;
+  pdf: Buffer;
+}
+
 export interface FeedbackPdfEmailInput {
   to: string;
   studentName: string;
@@ -51,6 +57,7 @@ export interface FeedbackPdfEmailInput {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
 
   async sendAbsenceNotice(input: AbsenceEmailInput): Promise<AbsenceEmailResult> {
     const recipients = [...new Set(input.to.map((email) => email.trim().toLowerCase()).filter(Boolean))];
@@ -181,6 +188,34 @@ export class MailService {
     );
   }
 
+  async sendReportPdf(input: ReportPdfEmailInput): Promise<EmailSendResult> {
+    const recipient = input.to.trim().toLowerCase();
+    if (!recipient) {
+      return { sentTo: [], detail: 'Enter an email address.' };
+    }
+
+    return this.deliver(
+      [recipient],
+      `Raport financiar — ${input.periodLabel}`,
+      [
+        'Përshëndetje,',
+        '',
+        `Bashkëngjitur është raporti financiar për periudhën ${input.periodLabel}.`,
+        '',
+        'Unity Tech Hub',
+      ].join('\n'),
+      `Report email failed`,
+      'The report could not be emailed. Check the address and try again.',
+      [
+        {
+          filename: `Raport-financiar-${input.periodLabel.replace(/\s+/g, '-')}.pdf`,
+          content: input.pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    );
+  }
+
   async sendAccountLink(input: {
     to: string;
     name: string;
@@ -234,15 +269,22 @@ export class MailService {
     }
 
     const port = Number(process.env.SMTP_PORT ?? 587);
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    });
+    if (!this.transporter) {
+      this.transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+        pool: true,
+        maxConnections: 3,
+        connectionTimeout: 15_000,
+        greetingTimeout: 15_000,
+        socketTimeout: 30_000,
+      });
+    }
 
     try {
-      await transporter.sendMail({ from, to: recipients, subject, text, attachments });
+      await this.transporter.sendMail({ from, to: recipients, subject, text, attachments });
       return { sentTo: recipients, detail: `Sent to ${recipients.join(', ')}` };
     } catch (error) {
       const message = error instanceof Error ? error.message : failureDetail;

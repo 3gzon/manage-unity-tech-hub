@@ -66,3 +66,7 @@ export function updateInstructor(id: string, data: UpdateInstructorRequest) {
 export function archiveInstructor(id: string) {
   return api.delete<void>(`instructors/${id}`);
 }
+
+export function resendFeedbackEmail(feedbackId: string, email: string) {
+  return api.post<{ sentTo: string; detail: string }>(`feedback/${feedbackId}/email`, { email });
+}

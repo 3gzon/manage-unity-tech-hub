@@ -1,7 +1,8 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { FinancialReportQueryDto } from './dto/financial-report.dto';
+import { FinancialReportQueryDto, SendReportEmailDto } from './dto/financial-report.dto';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
@@ -13,5 +14,23 @@ export class ReportsController {
   @Permissions('reports.financial')
   financial(@Query() query: FinancialReportQueryDto) {
     return this.reportsService.getFinancialReport(query);
+  }
+
+  @Get('financial/pdf')
+  @Permissions('reports.financial')
+  async financialPdf(@Query() query: FinancialReportQueryDto, @Res() res: Response) {
+    const { pdf, periodLabel } = await this.reportsService.generatePdf(query);
+    const safeName = periodLabel.replace(/[^\w.-]+/g, '-');
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Raport-financiar-${safeName}.pdf"`,
+    });
+    res.send(pdf);
+  }
+
+  @Post('financial/email')
+  @Permissions('reports.financial')
+  sendEmail(@Body() dto: SendReportEmailDto) {
+    return this.reportsService.sendReportEmail(dto, dto.email);
   }
 }

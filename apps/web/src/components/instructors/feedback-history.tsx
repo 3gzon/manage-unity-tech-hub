@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FeedbackRating, StudentFeedbackItem } from '@unity/types';
-import { fetchFeedback } from '@/lib/instructors-api';
+import { fetchFeedback, resendFeedbackEmail } from '@/lib/instructors-api';
 import { getAccessToken } from '@/lib/auth/token-storage';
+import { Label } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,9 @@ export function FeedbackHistory({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentFeedbackItem | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +66,20 @@ export function FeedbackHistory({
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function resendEmail(item: StudentFeedbackItem) {
+    if (!emailAddress.trim()) return;
+    setEmailSending(true);
+    setEmailNotice(null);
+    try {
+      await resendFeedbackEmail(item.id, emailAddress.trim());
+      setEmailNotice(`Email sent to ${emailAddress.trim()}.`);
+    } catch (err) {
+      setEmailNotice(err instanceof Error ? err.message : 'Could not send email');
+    } finally {
+      setEmailSending(false);
+    }
+  }
 
   async function download(item: StudentFeedbackItem) {
     setDownloadError(null);
@@ -166,6 +184,8 @@ export function FeedbackHistory({
           if (!open) {
             setSelected(null);
             setDownloadError(null);
+            setEmailNotice(null);
+            setEmailAddress('');
           }
         }}
       >
@@ -191,6 +211,28 @@ export function FeedbackHistory({
               <TextBlock title="What to improve" body={selected.improvements} />
               <TextBlock title="Next steps" body={selected.nextSteps} />
               {downloadError ? <p className="text-sm text-red-600">{downloadError}</p> : null}
+
+              <div className="space-y-2 border-t pt-3">
+                <Label>Resend to email</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder={selected.sentTo}
+                    value={emailAddress}
+                    onChange={(e) => { setEmailAddress(e.target.value); setEmailNotice(null); }}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={emailSending || !emailAddress.trim()}
+                    onClick={() => void resendEmail(selected)}
+                  >
+                    {emailSending ? 'Sending…' : 'Send'}
+                  </Button>
+                </div>
+                {emailNotice ? (
+                  <p className={`text-sm ${emailNotice.includes('sent') ? 'text-emerald-700' : 'text-red-600'}`}>{emailNotice}</p>
+                ) : null}
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setSelected(null)}>

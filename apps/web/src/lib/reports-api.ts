@@ -10,3 +10,12 @@ export function fetchFinancialReport(query: FinancialReportQuery = {}) {
     },
   });
 }
+
+export function sendFinancialReportEmail(query: FinancialReportQuery, email: string) {
+  return api.post<{ sentTo: string; detail: string }>('reports/financial/email', {
+    preset: query.preset,
+    fromDate: query.fromDate,
+    toDate: query.toDate,
+    email,
+  });
+}

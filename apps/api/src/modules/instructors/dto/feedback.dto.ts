@@ -50,6 +50,11 @@ export class SendStudentFeedbackDto {
   nextSteps!: string;
 }
 
+export class ResendFeedbackEmailDto {
+  @IsEmail()
+  email!: string;
+}
+
 export class ListFeedbackQueryDto {
   @IsOptional()
   @Type(() => Number)
