@@ -353,7 +353,8 @@ export class AuthService {
         expiresAt: new Date(Date.now() + ttlMs),
       },
     });
-    const origin = (this.configService.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
+    const raw = this.configService.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000';
+    const origin = (raw.split(',')[0] ?? raw).trim().replace(/\/$/, '');
     const path = purpose === 'CONFIRM_ACCOUNT' ? 'confirm-account' : 'reset-password';
     return `${origin}/${path}?token=${token}`;
   }
