@@ -312,8 +312,7 @@ export class MailService {
 
     const resend = this.getResend();
     if (resend) {
-      const resendFrom = process.env.RESEND_FROM?.trim() || 'Unity Tech Hub <onboarding@resend.dev>';
-      return this.deliverViaResend(resend, resendFrom, recipients, subject, text, logLabel, attachments);
+      return this.deliverViaResend(resend, from, recipients, subject, text, logLabel, attachments);
     }
     return this.deliverViaSmtp(from, recipients, subject, text, logLabel, failureDetail, attachments);
   }
