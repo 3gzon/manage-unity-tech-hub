@@ -46,5 +46,12 @@ export const handler = async (
   if (!cachedHandler) {
     cachedHandler = await bootstrap();
   }
+
+  // Netlify Functions omit requestContext, which serverless-express
+  // needs to identify the event as API Gateway v1 format.
+  if (!event.requestContext) {
+    event.requestContext = { resourceId: 'netlify', httpMethod: event.httpMethod, path: event.path };
+  }
+
   return cachedHandler(event as never, context as never, callback as never);
 };
