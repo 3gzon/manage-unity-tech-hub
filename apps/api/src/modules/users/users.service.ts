@@ -18,7 +18,7 @@ import type {
 import { SYSTEM_ROLES } from '@unity/types';
 import { Prisma, UserStatus } from '@prisma/client';
 import { currentBranchId } from '../../common/branch/branch-context';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
 import { AuditService } from '../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';

@@ -39,3 +39,6 @@ apps/api/prisma/*.db-journal
 
 # Local Netlify folder
 .netlify
+
+# Netlify API function bundle
+api-bundle

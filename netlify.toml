@@ -1,0 +1,23 @@
+[build]
+  command = "pnpm install --frozen-lockfile && pnpm --filter @unity/types build && pnpm --filter api exec prisma generate && pnpm --filter api build && node scripts/prepare-api-function.mjs && pnpm --filter web build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_CONFIG_PRODUCTION = "false"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "none"
+  included_files = [
+    "api-bundle/**"
+  ]
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
