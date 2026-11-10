@@ -390,6 +390,7 @@ function AttendanceCell({
         >
           {mark === 'check' ? <Check className="h-4 w-4 text-emerald-600" strokeWidth={2.5} /> : null}
           {mark === 'cross' ? <X className="h-4 w-4 text-rose-500" strokeWidth={2.5} /> : null}
+          {mark === 'empty' ? <span className="text-slate-300">–</span> : null}
         </button>
         {canEdit ? (
           <button
