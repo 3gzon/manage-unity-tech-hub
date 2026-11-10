@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { FeedbackRating, SendStudentFeedbackResponse, StudentFeedbackItem, StudentFeedbackListResponse } from '@unity/types';
+import type { BulkFeedbackResult, BulkSendFeedbackResponse, FeedbackRating, SendStudentFeedbackResponse, StudentFeedbackItem, StudentFeedbackListResponse } from '@unity/types';
 import { Prisma } from '@prisma/client';
 import { isPortalAdmin } from '../../common/auth/portal-access';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
@@ -7,7 +7,7 @@ import { AuditService } from '../../infrastructure/audit/audit.service';
 import { MailService } from '../../infrastructure/mail/mail.service';
 import { PrismaService } from '../../infrastructure/database/prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
-import type { ListFeedbackQueryDto, SendStudentFeedbackDto } from './dto/feedback.dto';
+import type { BulkSendFeedbackDto, ListFeedbackQueryDto, SendStudentFeedbackDto } from './dto/feedback.dto';
 import { renderFeedbackPdf } from './feedback-pdf';
 import { currentBranchId } from '../../common/branch/branch-context';
 
@@ -129,6 +129,123 @@ export class FeedbackService {
     });
 
     return { sentTo: result.sentTo[0] ?? dto.email, detail: result.detail };
+  }
+
+  async bulkSend(
+    user: AuthenticatedUser,
+    instructorId: string,
+    dto: BulkSendFeedbackDto,
+  ): Promise<BulkSendFeedbackResponse> {
+    const instructor = await this.prisma.instructor.findFirst({
+      where: { id: instructorId, deletedAt: null },
+    });
+    if (!instructor) throw new NotFoundException('Instructor not found');
+
+    const isStaff = isPortalAdmin(user.roles);
+    if (!isStaff && instructor.userId !== user.id) {
+      throw new ForbiddenException('You can only send feedback for your own students');
+    }
+
+    const instructorName = `${instructor.firstName} ${instructor.lastName}`.trim();
+    const settings = await this.settings.get();
+    const results: BulkFeedbackResult[] = [];
+    let sent = 0;
+    let failed = 0;
+
+    for (const entry of dto.entries) {
+      try {
+        const enrollment = await this.prisma.enrollment.findFirst({
+          where: {
+            studentId: entry.studentId,
+            groupId: entry.groupId,
+            deletedAt: null,
+            status: { in: ['ACTIVE', 'PENDING'] },
+            student: { deletedAt: null },
+            group: { instructorId, deletedAt: null },
+          },
+          include: {
+            student: { select: { firstName: true, lastName: true } },
+            group: { select: { name: true, course: { select: { name: true } } } },
+          },
+        });
+        if (!enrollment) {
+          results.push({ studentId: entry.studentId, studentName: entry.studentId, sentTo: null, error: 'Student not found in this group' });
+          failed += 1;
+          continue;
+        }
+
+        const studentName = `${enrollment.student.firstName} ${enrollment.student.lastName}`.trim();
+        const pdf = await renderFeedbackPdf({
+          schoolName: settings.schoolName,
+          date: formatFeedbackDate(new Date()),
+          instructorName,
+          studentName,
+          courseName: enrollment.group.course.name,
+          groupName: enrollment.group.name,
+          period: dto.period.trim(),
+          overall: entry.overall,
+          participation: entry.participation,
+          understanding: entry.understanding,
+          practice: entry.practice,
+          attendance: entry.attendance,
+          strengths: entry.strengths.trim(),
+          improvements: entry.improvements.trim(),
+          nextSteps: entry.nextSteps.trim(),
+        });
+
+        const result = await this.mail.sendFeedbackPdf({
+          to: entry.email,
+          studentName,
+          courseName: enrollment.group.course.name,
+          groupName: enrollment.group.name,
+          period: dto.period.trim(),
+          instructorName,
+          pdf,
+        });
+
+        const sentTo = result.sentTo[0] ?? entry.email.trim().toLowerCase();
+
+        await this.prisma.studentFeedback.create({
+          data: {
+            branchId: currentBranchId()!,
+            studentId: entry.studentId,
+            instructorId,
+            groupId: entry.groupId,
+            period: dto.period.trim(),
+            overall: entry.overall,
+            participation: entry.participation,
+            understanding: entry.understanding,
+            practice: entry.practice,
+            attendance: entry.attendance,
+            strengths: entry.strengths.trim(),
+            improvements: entry.improvements.trim(),
+            nextSteps: entry.nextSteps.trim(),
+            sentTo,
+          },
+        });
+
+        results.push({ studentId: entry.studentId, studentName, sentTo, error: null });
+        sent += 1;
+      } catch (err) {
+        results.push({
+          studentId: entry.studentId,
+          studentName: entry.studentId,
+          sentTo: null,
+          error: err instanceof Error ? err.message : 'Failed to send',
+        });
+        failed += 1;
+      }
+    }
+
+    await this.audit.record({
+      userId: user.id,
+      action: 'BULK_FEEDBACK_SENT',
+      entity: 'Instructor',
+      entityId: instructorId,
+      newValue: { period: dto.period, sent, failed },
+    });
+
+    return { sent, failed, results };
   }
 
   async list(user: AuthenticatedUser, query: ListFeedbackQueryDto): Promise<StudentFeedbackListResponse> {

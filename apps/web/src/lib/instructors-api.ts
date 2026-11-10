@@ -1,4 +1,6 @@
 import type {
+  BulkSendFeedbackRequest,
+  BulkSendFeedbackResponse,
   CreateInstructorRequest,
   InstructorDetail,
   InstructorListQuery,
@@ -33,6 +35,10 @@ export function fetchMyInstructor() {
 
 export function sendStudentFeedback(instructorId: string, data: SendStudentFeedbackRequest) {
   return api.post<SendStudentFeedbackResponse>(`instructors/${instructorId}/feedback`, data);
+}
+
+export function bulkSendFeedback(instructorId: string, data: BulkSendFeedbackRequest) {
+  return api.post<BulkSendFeedbackResponse>(`instructors/${instructorId}/feedback/bulk`, data);
 }
 
 export function fetchFeedback(query: StudentFeedbackListQuery = {}) {

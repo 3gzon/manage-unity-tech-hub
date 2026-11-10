@@ -22,7 +22,7 @@ import {
   UpdateInstructorDto,
 } from './dto/instructor.dto';
 import { InstructorReportQueryDto, SendInstructorReportEmailDto } from './dto/instructor-report.dto';
-import { SendStudentFeedbackDto } from './dto/feedback.dto';
+import { BulkSendFeedbackDto, SendStudentFeedbackDto } from './dto/feedback.dto';
 import { FeedbackService } from './feedback.service';
 import { InstructorReportService } from './instructor-report.service';
 import { InstructorsService } from './instructors.service';
@@ -74,6 +74,16 @@ export class InstructorsController {
     @Body() dto: SendStudentFeedbackDto,
   ) {
     return this.feedbackService.send(user, id, dto);
+  }
+
+  @Post(':id/feedback/bulk')
+  @Roles('INSTRUCTOR', 'SUPER_ADMIN', 'BRANCH_ADMIN')
+  bulkSendFeedback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: BulkSendFeedbackDto,
+  ) {
+    return this.feedbackService.bulkSend(user, id, dto);
   }
 
   @Post()

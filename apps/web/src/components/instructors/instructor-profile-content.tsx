@@ -16,6 +16,7 @@ import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } fr
 import { EmptyState, ErrorState } from '@/components/dashboard/dashboard-states';
 import { Input, Label } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { BulkFeedbackDialog } from '@/components/instructors/bulk-feedback-dialog';
 import { FeedbackHistory } from '@/components/instructors/feedback-history';
 import { InstructorFeedbackDialog } from '@/components/instructors/instructor-feedback-dialog';
 
@@ -29,6 +30,7 @@ export function InstructorProfileContent({ self = false }: { self?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedbackStudent, setFeedbackStudent] = useState<InstructorStudent | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -131,10 +133,18 @@ export function InstructorProfileContent({ self = false }: { self?: boolean }) {
       </section>
 
       <section>
-        <h2 className="mb-2 text-lg font-medium">Students</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-lg font-medium">Students</h2>
+          {(instructor.students ?? []).length > 0 ? (
+            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
+              Give feedback to all
+            </Button>
+          ) : null}
+        </div>
         <p className="mb-3 text-sm text-muted-foreground">
-          Send one feedback PDF to a student. It covers the period, the overall result, participation, understanding,
-          practice, attendance, strengths, what to improve, and the next steps.
+          Send one feedback PDF to a student, or use &quot;Give feedback to all&quot; to fill and send feedback for
+          every student at once. It covers the period, the overall result, participation, understanding, practice,
+          attendance, strengths, what to improve, and the next steps.
         </p>
         {(instructor.students ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No students are assigned to this instructor yet.</p>
@@ -193,6 +203,14 @@ export function InstructorProfileContent({ self = false }: { self?: boolean }) {
           if (!open) setFeedbackStudent(null);
         }}
         onSent={setNotice}
+      />
+
+      <BulkFeedbackDialog
+        instructorId={instructor.id}
+        students={instructor.students ?? []}
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        onDone={(msg) => { setNotice(msg); void load(); }}
       />
     </div>
   );

@@ -60,6 +60,38 @@ export interface SendStudentFeedbackResponse {
   detail: string;
 }
 
+export interface BulkFeedbackEntry {
+  studentId: string;
+  groupId: string;
+  email: string;
+  overall: FeedbackRating;
+  participation: FeedbackRating;
+  understanding: FeedbackRating;
+  practice: FeedbackRating;
+  attendance: FeedbackRating;
+  strengths: string;
+  improvements: string;
+  nextSteps: string;
+}
+
+export interface BulkSendFeedbackRequest {
+  period: string;
+  entries: BulkFeedbackEntry[];
+}
+
+export interface BulkFeedbackResult {
+  studentId: string;
+  studentName: string;
+  sentTo: string | null;
+  error: string | null;
+}
+
+export interface BulkSendFeedbackResponse {
+  sent: number;
+  failed: number;
+  results: BulkFeedbackResult[];
+}
+
 export interface StudentFeedbackItem {
   id: string;
   studentId: string;
