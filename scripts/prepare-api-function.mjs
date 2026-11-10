@@ -17,13 +17,23 @@ if (existsSync('apps/api/assets')) {
   cpSync('apps/api/assets', join(BUNDLE_DIR, 'assets'), { recursive: true });
 }
 
-// Copy generated Prisma client from the workspace
-const prismaClientDir = 'node_modules/.pnpm';
-const prismaEntry = readdirSync(prismaClientDir).find((d) => d.startsWith('@prisma+client@'));
+// Copy the fully generated Prisma client (with enums) into the bundle.
+// pnpm deploy installs a clean @prisma/client without generated output,
+// so we overwrite it with the workspace copy that prisma generate built.
+const pnpmStore = 'node_modules/.pnpm';
+const prismaEntry = readdirSync(pnpmStore).find((d) => d.startsWith('@prisma+client@'));
 if (prismaEntry) {
-  const src = join(prismaClientDir, prismaEntry, 'node_modules', '.prisma');
-  if (existsSync(src)) {
-    cpSync(src, join(BUNDLE_DIR, 'node_modules', '.prisma'), { recursive: true });
+  const generatedClient = join(pnpmStore, prismaEntry, 'node_modules', '@prisma', 'client');
+  if (existsSync(generatedClient)) {
+    const dest = join(BUNDLE_DIR, 'node_modules', '@prisma', 'client');
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(generatedClient, dest, { recursive: true });
+  }
+  const generatedDotPrisma = join(pnpmStore, prismaEntry, 'node_modules', '.prisma');
+  if (existsSync(generatedDotPrisma)) {
+    const dest = join(BUNDLE_DIR, 'node_modules', '.prisma');
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(generatedDotPrisma, dest, { recursive: true });
   }
 }
 
