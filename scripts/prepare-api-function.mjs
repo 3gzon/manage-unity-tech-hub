@@ -13,6 +13,10 @@ execSync(`pnpm --filter api --prod deploy ${BUNDLE_DIR}`, { stdio: 'inherit' });
 cpSync('apps/api/dist', join(BUNDLE_DIR, 'dist'), { recursive: true });
 cpSync('apps/api/prisma', join(BUNDLE_DIR, 'prisma'), { recursive: true });
 
+if (existsSync('apps/api/assets')) {
+  cpSync('apps/api/assets', join(BUNDLE_DIR, 'assets'), { recursive: true });
+}
+
 // Copy generated Prisma client from the workspace
 const prismaClientDir = 'node_modules/.pnpm';
 const prismaEntry = readdirSync(prismaClientDir).find((d) => d.startsWith('@prisma+client@'));

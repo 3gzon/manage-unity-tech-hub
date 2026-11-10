@@ -58,6 +58,12 @@ export class GroupsController {
     return this.groupsService.update(user, id, dto);
   }
 
+  @Post(':id/complete')
+  @Permissions('groups.manage')
+  complete(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.groupsService.complete(user, id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Permissions('groups.manage')

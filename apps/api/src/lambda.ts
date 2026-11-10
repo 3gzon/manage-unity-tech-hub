@@ -35,7 +35,12 @@ async function bootstrap() {
 
   await app.init();
 
-  return serverlessExpress({ app: expressApp });
+  return serverlessExpress({
+    app: expressApp,
+    binarySettings: {
+      contentTypes: ['application/pdf', 'application/octet-stream', 'image/*'],
+    },
+  });
 }
 
 export const handler = async (

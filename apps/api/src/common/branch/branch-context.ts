@@ -112,7 +112,10 @@ export async function applyBranchScope(
     ];
     if (delegate && args.where) {
       const existing = await delegate.findUnique({ where: args.where, select: { branchId: true } });
-      if (!existing || existing.branchId !== branchId) {
+      if (existing && existing.branchId !== branchId) {
+        throw new NotFoundException('Record not found');
+      }
+      if (!existing && operation !== 'upsert') {
         throw new NotFoundException('Record not found');
       }
     }

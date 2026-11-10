@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import type { GroupListItem, GroupListQuery, InstructorOption } from '@unity/types';
-import { archiveGroup, createGroup, fetchCourses, fetchGroups } from '@/lib/academics-api';
+import { archiveGroup, completeGroup, createGroup, fetchCourses, fetchGroups } from '@/lib/academics-api';
 import { fetchInstructorOptions } from '@/lib/instructors-api';
 import { useAuth } from '@/lib/auth/auth-context';
 import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
@@ -35,6 +35,7 @@ export function GroupsPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: '', courseId: '', instructorId: '', capacity: '' });
+  const [completeTarget, setCompleteTarget] = useState<GroupListItem | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<GroupListItem | null>(null);
 
   const load = useCallback(async () => {
@@ -73,6 +74,13 @@ export function GroupsPageContent() {
     });
     setCreateOpen(false);
     setForm({ name: '', courseId: '', instructorId: '', capacity: '' });
+    await load();
+  }
+
+  async function handleComplete() {
+    if (!completeTarget) return;
+    await completeGroup(completeTarget.id);
+    setCompleteTarget(null);
     await load();
   }
 
@@ -166,7 +174,12 @@ export function GroupsPageContent() {
                     <Badge variant="outline">{group.status}</Badge>
                   </td>
                   {canManage ? (
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 space-x-1">
+                      {group.status === 'ACTIVE' || group.status === 'PLANNED' ? (
+                        <Button variant="ghost" size="sm" onClick={() => setCompleteTarget(group)}>
+                          Complete
+                        </Button>
+                      ) : null}
                       <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(group)}>
                         Archive
                       </Button>
@@ -223,6 +236,21 @@ export function GroupsPageContent() {
           <Button onClick={() => void handleCreate()} disabled={!form.name.trim() || !form.courseId}>
             Create
           </Button>
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog open={Boolean(completeTarget)} onOpenChange={() => setCompleteTarget(null)}>
+        <DialogHeader>
+          <DialogTitle>Complete group</DialogTitle>
+          <DialogDescription>
+            Mark &ldquo;{completeTarget?.name}&rdquo; as completed? Students will no longer be scheduled for new sessions.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCompleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleComplete()}>Confirm</Button>
         </DialogFooter>
       </Dialog>
 

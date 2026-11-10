@@ -270,6 +270,26 @@ export class GroupsService {
     return this.findOne(user, id);
   }
 
+  async complete(user: AuthenticatedUser, id: string): Promise<GroupDetail> {
+    this.access.assertCanManageGroups(user);
+    await this.assertExists(id);
+
+    await this.prisma.group.update({
+      where: { id },
+      data: { status: 'COMPLETED' },
+    });
+
+    await this.audit.record({
+      userId: user.id,
+      action: 'UPDATE',
+      entity: 'Group',
+      entityId: id,
+      newValue: { status: 'COMPLETED' },
+    });
+
+    return this.findOne(user, id);
+  }
+
   async archive(user: AuthenticatedUser, id: string) {
     this.access.assertCanManageGroups(user);
     await this.assertExists(id);

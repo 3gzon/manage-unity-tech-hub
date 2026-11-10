@@ -61,6 +61,10 @@ export function updateGroupSchedule(
   return api.patch<GroupDetail>(`groups/${id}/schedule`, data);
 }
 
+export function completeGroup(id: string) {
+  return api.post<GroupDetail>(`groups/${id}/complete`);
+}
+
 export function archiveGroup(id: string) {
   return api.delete<void>(`groups/${id}`);
 }
