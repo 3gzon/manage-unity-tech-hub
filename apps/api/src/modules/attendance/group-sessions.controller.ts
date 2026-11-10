@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/commo
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface';
-import { CreateClassSessionDto, ListGroupSessionsQueryDto } from './dto/attendance.dto';
+import { CreateClassSessionDto, ListGroupSessionsQueryDto, RepeatMonthDto } from './dto/attendance.dto';
 import { SessionsService } from './sessions.service';
 
 @Controller('groups/:groupId/sessions')
@@ -27,6 +27,16 @@ export class GroupSessionsController {
     @Body() dto: CreateClassSessionDto,
   ) {
     return this.sessionsService.createGroupSession(user, groupId, dto);
+  }
+
+  @Post('repeat-month')
+  @Permissions('attendance.manage')
+  repeatMonth(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId') groupId: string,
+    @Body() dto: RepeatMonthDto,
+  ) {
+    return this.sessionsService.repeatMonth(user, groupId, dto.sourceMonth, dto.targetMonth);
   }
 
   @Delete(':sessionId')

@@ -95,6 +95,11 @@ export interface GenerateSessionsResponse {
   skipped: number;
 }
 
+export interface RepeatMonthRequest {
+  sourceMonth: string;
+  targetMonth?: string;
+}
+
 export interface UpdateSessionAttendanceRequest {
   records: Array<{
     studentId: string;

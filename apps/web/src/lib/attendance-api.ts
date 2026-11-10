@@ -5,6 +5,7 @@ import type {
   GenerateSessionsRequest,
   GenerateSessionsResponse,
   GroupAttendanceResponse,
+  RepeatMonthRequest,
   SaveGroupAttendanceRequest,
   InstructorScheduleQuery,
   InstructorScheduleResponse,
@@ -49,6 +50,10 @@ export function generateGroupSessions(groupId: string, data: GenerateSessionsReq
     ...data,
     generateFromSchedule: true,
   });
+}
+
+export function repeatMonthSessions(groupId: string, data: RepeatMonthRequest) {
+  return api.post<GenerateSessionsResponse & { patterns: number }>(`groups/${groupId}/sessions/repeat-month`, data);
 }
 
 export function fetchSessionAttendance(sessionId: string) {

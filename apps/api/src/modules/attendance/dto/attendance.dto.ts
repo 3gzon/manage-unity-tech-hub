@@ -132,6 +132,17 @@ export class SaveGroupAttendanceDto {
   changes!: GroupAttendanceChangeDto[];
 }
 
+export class RepeatMonthDto {
+  @IsString()
+  @MinLength(7)
+  sourceMonth!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(7)
+  targetMonth?: string;
+}
+
 export class ListTodaySessionsQueryDto {
   @IsOptional()
   @IsDateString()

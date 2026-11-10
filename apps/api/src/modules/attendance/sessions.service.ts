@@ -151,6 +151,28 @@ export class SessionsService {
     return this.toDetail(session);
   }
 
+  async repeatMonth(user: AuthenticatedUser, groupId: string, sourceMonth: string, targetMonth?: string) {
+    await this.access.assertCanAccessGroup(user, groupId);
+    this.assertCanManageAttendance(user);
+
+    const [srcYear, srcMon] = sourceMonth.split('-').map(Number);
+    const tgt = targetMonth
+      ? targetMonth
+      : `${srcMon === 12 ? srcYear! + 1 : srcYear}-${String(srcMon === 12 ? 1 : srcMon! + 1).padStart(2, '0')}`;
+
+    const result = await this.generator.repeatMonth(groupId, sourceMonth, tgt);
+
+    await this.audit.record({
+      userId: user.id,
+      action: 'SESSIONS_REPEATED',
+      entity: 'Group',
+      entityId: groupId,
+      newValue: { sourceMonth, targetMonth: tgt, ...result },
+    });
+
+    return result;
+  }
+
   async deleteGroupSession(user: AuthenticatedUser, groupId: string, sessionId: string) {
     await this.access.assertCanAccessGroup(user, groupId);
     this.assertCanManageAttendance(user);

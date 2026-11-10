@@ -23,6 +23,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
       router.replace('/dashboard');
+      const fallback = setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1000);
+      return () => clearTimeout(fallback);
     }
   }, [isAuthenticated, isLoading, router]);
 

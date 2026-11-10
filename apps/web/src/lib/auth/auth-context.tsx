@@ -77,9 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await loginRequest(credentials);
       setAccessToken(response.accessToken);
       setUser(rememberBranch(response.user));
-      router.push('/dashboard');
     },
-    [router],
+    [],
   );
 
   const logout = useCallback(async () => {

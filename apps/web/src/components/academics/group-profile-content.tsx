@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ClassSessionListItem, EnrollmentListItem, GroupDetail, InstructorOption } from '@unity/types';
 import { createEnrollment, fetchGroup, updateGroup, withdrawEnrollment } from '@/lib/academics-api';
-import { createGroupSession, deleteGroupSession, fetchGroupSessions } from '@/lib/attendance-api';
+import { createGroupSession, deleteGroupSession, fetchGroupSessions, generateGroupSessions, repeatMonthSessions } from '@/lib/attendance-api';
 import { fetchInstructorOptions } from '@/lib/instructors-api';
 import { fetchStudents } from '@/lib/students-api';
 import { hasPermission, isAdminPortalUser } from '@/lib/auth/authorization';
@@ -48,6 +48,10 @@ export function GroupProfileContent() {
   const [searchingStudents, setSearchingStudents] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateResult, setGenerateResult] = useState<string | null>(null);
+  const [repeating, setRepeating] = useState(false);
+  const [repeatResult, setRepeatResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +73,8 @@ export function GroupProfileContent() {
 
   useEffect(() => {
     if (!params.id) return;
+    setGenerateResult(null);
+    setRepeatResult(null);
     const fromDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth(), 1));
     const toDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth() + 1, 0));
     void fetchGroupSessions(params.id, { page: 1, pageSize: 100, fromDate, toDate })
@@ -98,6 +104,45 @@ export function GroupProfileContent() {
   async function removeClass(input: { groupId: string; sessionId: string }) {
     await deleteGroupSession(input.groupId, input.sessionId);
     setSessionsVersion((version) => version + 1);
+  }
+
+  async function handleGenerateMonth() {
+    if (!group) return;
+    setGenerating(true);
+    setGenerateResult(null);
+    try {
+      const fromDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth(), 1));
+      const toDate = toDateInputValue(new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth() + 1, 0));
+      const result = await generateGroupSessions(group.id, { fromDate, toDate });
+      setGenerateResult(`${result.created} session${result.created !== 1 ? 's' : ''} created, ${result.skipped} skipped.`);
+      setSessionsVersion((version) => version + 1);
+    } catch (err) {
+      setGenerateResult(err instanceof Error ? err.message : 'Failed to generate sessions');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleRepeatPreviousMonth() {
+    if (!group) return;
+    setRepeating(true);
+    setRepeatResult(null);
+    try {
+      const prevMonth = new Date(scheduleMonth.getFullYear(), scheduleMonth.getMonth() - 1, 1);
+      const sourceMonth = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
+      const targetMonth = `${scheduleMonth.getFullYear()}-${String(scheduleMonth.getMonth() + 1).padStart(2, '0')}`;
+      const result = await repeatMonthSessions(group.id, { sourceMonth, targetMonth });
+      if (result.patterns === 0) {
+        setRepeatResult('No sessions found in the previous month to repeat.');
+      } else {
+        setRepeatResult(`${result.created} session${result.created !== 1 ? 's' : ''} created from ${result.patterns} pattern${result.patterns !== 1 ? 's' : ''}, ${result.skipped} skipped.`);
+      }
+      setSessionsVersion((version) => version + 1);
+    } catch (err) {
+      setRepeatResult(err instanceof Error ? err.message : 'Failed to repeat sessions');
+    } finally {
+      setRepeating(false);
+    }
   }
 
   useEffect(() => {
@@ -262,6 +307,28 @@ export function GroupProfileContent() {
           counts={sessionCounts(sessions)}
           onSelect={setPickedDate}
         />
+        {canEditSchedule ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={generating || repeating}
+              onClick={() => void handleGenerateMonth()}
+            >
+              {generating ? 'Generating…' : 'Generate month from schedule'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={generating || repeating}
+              onClick={() => void handleRepeatPreviousMonth()}
+            >
+              {repeating ? 'Repeating…' : 'Repeat previous month'}
+            </Button>
+            {generateResult ? <p className="text-sm text-muted-foreground">{generateResult}</p> : null}
+            {repeatResult ? <p className="text-sm text-muted-foreground">{repeatResult}</p> : null}
+          </div>
+        ) : null}
         <div className="mt-4">
           <DayClasses
             dateLabel={parseDateInput(pickedDate).toLocaleDateString(undefined, {
