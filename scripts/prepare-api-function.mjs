@@ -19,21 +19,41 @@ if (existsSync('apps/api/assets')) {
 
 // Copy the fully generated Prisma client (with enums) into the bundle.
 // pnpm deploy installs a clean @prisma/client without generated output,
-// so we overwrite it with the workspace copy that prisma generate built.
+// so we overwrite every copy with the workspace version that prisma generate built.
 const pnpmStore = 'node_modules/.pnpm';
 const prismaEntry = readdirSync(pnpmStore).find((d) => d.startsWith('@prisma+client@'));
 if (prismaEntry) {
   const generatedClient = join(pnpmStore, prismaEntry, 'node_modules', '@prisma', 'client');
+  const generatedDotPrisma = join(pnpmStore, prismaEntry, 'node_modules', '.prisma');
+
+  // Overwrite the top-level node_modules copy
   if (existsSync(generatedClient)) {
     const dest = join(BUNDLE_DIR, 'node_modules', '@prisma', 'client');
     rmSync(dest, { recursive: true, force: true });
     cpSync(generatedClient, dest, { recursive: true });
   }
-  const generatedDotPrisma = join(pnpmStore, prismaEntry, 'node_modules', '.prisma');
   if (existsSync(generatedDotPrisma)) {
     const dest = join(BUNDLE_DIR, 'node_modules', '.prisma');
     rmSync(dest, { recursive: true, force: true });
     cpSync(generatedDotPrisma, dest, { recursive: true });
+  }
+
+  // Also overwrite the .pnpm store copy (pnpm resolves through this path)
+  const bundlePnpmDir = join(BUNDLE_DIR, 'node_modules', '.pnpm');
+  if (existsSync(bundlePnpmDir)) {
+    const bundlePrismaEntry = readdirSync(bundlePnpmDir).find((d) => d.startsWith('@prisma+client@'));
+    if (bundlePrismaEntry) {
+      if (existsSync(generatedClient)) {
+        const dest = join(bundlePnpmDir, bundlePrismaEntry, 'node_modules', '@prisma', 'client');
+        rmSync(dest, { recursive: true, force: true });
+        cpSync(generatedClient, dest, { recursive: true });
+      }
+      if (existsSync(generatedDotPrisma)) {
+        const dest = join(bundlePnpmDir, bundlePrismaEntry, 'node_modules', '.prisma');
+        rmSync(dest, { recursive: true, force: true });
+        cpSync(generatedDotPrisma, dest, { recursive: true });
+      }
+    }
   }
 }
 
